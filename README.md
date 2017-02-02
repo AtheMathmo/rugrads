@@ -52,3 +52,7 @@ you cannot change the values of x and y once they are set. This is obviously bad
 on the list of improvements.
 
 I'll be trying to find ways to improve the API now.
+
+## References
+
+- [autograd](https://github.com/HIPS/autograd/tree/master/autograd)
