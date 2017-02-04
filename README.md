@@ -6,8 +6,7 @@ compute the derivative of this function for us implicitly.
 
 ## What can rugrads do now?
 
-Compute the gradient of simple functions made up of `sin`, `cos`, `add`,
-and `mul` operations.
+Compute the gradient of simple functions found in the `functions` module.
 
 It is designed to be easy to extend rugrads to include user defined
 functions.
@@ -56,3 +55,4 @@ any suggestions!
 ## References
 
 - [autograd](https://github.com/HIPS/autograd/tree/master/autograd)
+- [Automatic differentiation in machine learning: a survey - Baydin et al.](https://arxiv.org/pdf/1502.05767.pdf)

@@ -7,7 +7,9 @@
 //! # Example
 //!
 //! ```
-//! use rugrads::*;
+//! use rugrads::{Context, Gradient};
+//! use rugrads::functions::*;
+//!
 //! // First we define our context and function variables
 //! let mut context = Context::new();
 //! let x = context.create_variable(0.5);
@@ -35,17 +37,40 @@
 //! grad.grad(x);
 //! ``` 
 
+#![deny(missing_docs)]
+
+pub mod functions;
+mod iter;
 
 use std::collections::HashMap;
-
 use std::f64;
 
+use iter::reverse_topology;
+
+/// The Gradient of an Expression
+///
+/// This struct can be used to evaluate the gradient of
+/// a given expression.
 pub struct Gradient<E: Expression> {
     expr: E,
     context: Context
 }
 
 impl<'a, E: Expression> Gradient<E> {
+    /// Take the gradient of an expression in some context
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rugrads::{Gradient, Context};
+    /// use rugrads::functions::Add;
+    ///
+    /// let mut context = Context::new();
+    /// let x = context.create_variable(2.0);
+    /// let f = Add(x, x);
+    ///
+    /// let grad = Gradient::of(f, context);
+    /// ```
     pub fn of(expr: E, context: Context) -> Self {
         Gradient {
             expr: expr,
@@ -53,10 +78,15 @@ impl<'a, E: Expression> Gradient<E> {
         }
     }
 
+    /// Gets the context for this gradient
+    /// 
+    /// You can use the context to set variable values.
     pub fn context(&mut self) -> &mut Context {
         &mut self.context
     }
 
+    /// Compute the gradient with respect to the given
+    /// `Variable`.
     pub fn grad(&mut self, wrt: Variable) -> f64 {
         // Reset the context
         self.context.node_count = 0;
@@ -85,67 +115,9 @@ impl<'a, E: Expression> Gradient<E> {
     }
 }
 
-fn relevant_parents(parents: &Vec<Node>, start_idx: usize) -> Vec<&Node> {
-    parents.iter()
-            .filter(|p| {
-                p.progenitors.contains(&start_idx) || p.index == start_idx
-            })
-            .collect()
-}
-
-fn reverse_topology<'a>(end: &'a Node, start_idx: usize) -> RevTopology<'a> {
-    let mut child_counts = HashMap::new();
-    {
-        let mut stack = vec![end];
-
-        while let Some(node) = stack.pop() {
-            let cc = child_counts.entry(node.index).or_insert(0);
-            *cc += 1;
-
-            stack.extend(relevant_parents(&node.parents, start_idx));
-        }
-    }
-    let mut data = Vec::<&'a Node>::new();
-    data.push(end);
-
-    RevTopology {
-        start: start_idx,
-        child_counts: child_counts,
-        childless_nodes: data,
-    }
-
-}
-
-struct RevTopology<'a> {
-    start: usize,
-    child_counts: HashMap<usize, usize>,
-    childless_nodes: Vec<&'a Node>
-}
-
-impl<'a> Iterator for RevTopology<'a> {
-    type Item = &'a Node;
-
-    fn next(&mut self) -> Option<&'a Node> {
-        if let Some(node) = self.childless_nodes.pop() {
-            for p in relevant_parents(&node.parents, self.start) {
-                let mut cc = self.child_counts.get_mut(&p.index)
-                                            .expect("All child counts should be present");
-                if *cc == 1 {
-                    self.childless_nodes.push(p);
-                } else {
-                    *cc -= 1;
-                }
-            }
-            Some(node)
-
-        } else {
-            None
-        }
-    }
-}
-
-
+/// An expression which can be evaluated
 pub trait Expression {
+    /// Evaluate the expression in the given context
     fn eval(&self, c: &mut Context) -> Node;
 }
 
@@ -153,18 +125,37 @@ trait VecJacProduct {
     fn vjp(&self, g: f64, node: &Node, argnum: usize) -> f64;
 }
 
+/// The context for a computational expression
+///
+/// The `Context` stores the variable values which are used in
+/// an expression.
+///
+/// The user is responsible for managing `Variable`s
+/// within a context. This means that the user should ensure
+/// that they do not mix up variables between different contexts.
 pub struct Context {
     vars: Vec<f64>,
     node_count: usize,
 }
 
 impl Context {
+    /// Create a new `Variable` with the given value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rugrads::Context;
+    ///
+    /// let mut c = Context::new();
+    /// let x = c.create_variable(2.5);
+    /// ```
     pub fn create_variable(&mut self, value: f64) -> Variable {
         let var_idx = self.vars.len();
         self.vars.push(value);
         Variable(var_idx)
     }
 
+    /// Create a new `Context`
     pub fn new() -> Context {
         Context {
             vars: vec![],
@@ -182,11 +173,37 @@ impl Context {
         self.vars[var.0]
     }
 
+    /// Set the given variable value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rugrads::Context;
+    ///
+    /// // Create a new variable with value 2.5
+    /// let mut c = Context::new();
+    /// let x = c.create_variable(2.5);
+    ///
+    /// // Actually, lets make that 3.0!
+    /// c.set_variable_value(x, 3.0);
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the `Variable` does not belong
+    /// to this context.
+    ///
+    /// More accurately - if the `Variable` has an index which is too
+    /// large for this context.
     pub fn set_variable_value(&mut self, var: Variable, value: f64) {
         self.vars[var.0] = value;
     }
 }
 
+/// A node in a computational graph
+///
+/// When we evaluate an expression we create
+/// a graph made up of nodes.
 pub struct Node {
     index: usize,
     value: f64,
@@ -215,10 +232,13 @@ impl Node {
     }
 }
 
+/// A Variable
+///
+/// Each variable specifies an index into a Context.
 #[derive(Clone, Copy)]
 pub struct Variable(usize);
 
-pub struct IdentityVJP;
+struct IdentityVJP;
 
 impl VecJacProduct for IdentityVJP {
     fn vjp(&self, g: f64, _: &Node, _: usize) -> f64 {
@@ -238,105 +258,10 @@ impl Expression for Variable {
     }
 }
 
-pub struct Add<X: Expression, Y: Expression>(pub X, pub Y);
-
-impl<X: Expression, Y: Expression> Expression for Add<X, Y> {
-    fn eval(&self, c: &mut Context) -> Node {
-        let x_eval = self.0.eval(c);
-        let y_eval = self.1.eval(c);
-
-        let parents = vec![x_eval, y_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node {
-            index: c.get_index(),
-            value: parents[0].value + parents[1].value,
-            parents: parents,
-            progenitors: progenitors,
-            _vjp: Box::new(IdentityVJP)
-        }
-    }
-}
-
-pub struct Mul<X: Expression, Y: Expression>(pub X, pub Y);
-
-pub struct MulVJP(f64, f64);
-
-impl VecJacProduct for MulVJP {
-    fn vjp(&self, g: f64, _: &Node, argnum: usize) -> f64 {
-        match argnum {
-            0 => g * self.1,
-            1 => g * self.0,
-            _ => panic!("Invalid argnum fed to Mul VJP"),
-        }
-    }
-}
-
-impl<X: Expression, Y: Expression> Expression for Mul<X, Y> {
-    fn eval(&self, c: &mut Context) -> Node {
-        let x_eval = self.0.eval(c);
-        let y_eval = self.1.eval(c);
-
-        let parents = vec![x_eval, y_eval];
-        let progenitors = Node::get_progenitors(&parents);
-        let (v1, v2) = (parents[0].value, parents[1].value);
-        Node {
-            index: c.get_index(),
-            value: v1 * v2,
-            parents: parents,
-            progenitors: progenitors,
-            _vjp: Box::new(MulVJP(v1, v2))
-        }
-    }
-}
-
-pub struct LinVJP<F: Fn(f64) -> f64>(F);
-
-impl<F: Fn(f64) -> f64> VecJacProduct for LinVJP<F> {
-    fn vjp(&self, g: f64, x: &Node, _: usize) -> f64 {
-        g * self.0(x.value)
-    }
-}
-
-pub struct Sin<X: Expression>(pub X);
-
-impl<X: Expression> Expression for Sin<X> {
-    fn eval(&self, c: &mut Context) -> Node {
-        let x_eval = self.0.eval(c);
-        let parents = vec![x_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node {
-            index: c.get_index(),
-            value: f64::sin(parents[0].value),
-            parents: parents,
-            progenitors: progenitors,
-            _vjp: Box::new(LinVJP(f64::cos)),
-        }
-    }
-}
-
-pub struct Cos<X: Expression>(pub X);
-
-impl<X: Expression> Expression for Cos<X> {
-    fn eval(&self, c: &mut Context) -> Node {
-        let x_eval = self.0.eval(c);
-        let parents = vec![x_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node {
-            index: c.get_index(),
-            value: f64::cos(parents[0].value),
-            parents: parents,
-            progenitors: progenitors,
-            _vjp: Box::new(LinVJP(|x| -f64::sin(x))),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::functions::*;
 
     #[test]
     fn test_basic_sum() {
@@ -390,30 +315,5 @@ mod tests {
         let mut grad = Gradient::of(f, context);
         assert!((grad.grad(x) - 1.0) < 1e-5);
         assert!((grad.grad(y) - 0.5) < 1e-5);
-    }
-
-    #[test]
-    fn test_multi_var_complex() {
-        // First we define our context and function variables
-        let mut context = Context::new();
-        let x = context.create_variable(0.5);
-        let y = context.create_variable(0.3);
-
-        // Below we build: y * sin(x) + cos(y)
-        // Take sin of x
-        let f = Sin(x);
-
-        // Multiply f with y
-        let g = Mul(y, f);
-
-        // Take cos(y) and add it to g
-        let h = Cos(y);
-        let fin = Add(h, g);
-
-        let mut grad = Gradient::of(fin, context);
-
-        // Take gradient with respect to x - has value: 
-        grad.grad(x);
-        grad.grad(y);
     }
 }
