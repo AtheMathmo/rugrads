@@ -1,9 +1,5 @@
-//! Functions module
-//!
-//! This module contains differentiable wrapper functions.
-
-use super::{Expression, VecJacProduct, Node};
-use super::{Container, Context};
+use ::{Expression, VecJacProduct, Node};
+use ::{Container, Context};
 
 struct LinVJP<F: Fn(f64) -> f64>(F);
 
@@ -147,7 +143,8 @@ pub fn powf<E>(x: Container<E>, n: f64) -> Container<Powf<E>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::{Add, Mul, Node, Context};
+    use ::functions::{Add, Mul};
+    use ::{Node, Context};
     use ::{Expression, IdentityVJP, VecJacProduct};
 
     pub struct TestVar(f64);
