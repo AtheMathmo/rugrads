@@ -19,8 +19,8 @@ of how you would specify a function in rugrads to be differentiated.
 ```rust
 extern crate rugrads;
 
-// Here we import `Context` and some functions
-use rugrads::*;
+use rugrads::{Context, Gradient};
+use rugrads::functions::*;
 
 // First we define our context and function variables
 let mut context = Context::new();
@@ -28,20 +28,13 @@ let x = context.create_variable(0.5);
 let y = context.create_variable(0.3);
 
 // Below we build: y * sin(x) + cos(y)
-// Take sin of x
-let f = Sin(x);
-
-// Multiply f with y
-let g = Mul(y, f);
-
-// Take cos(y) and add it to g
-let h = Cos(y);
-let fin = Add(h, g);
+let f = y * sin(x) + cos(y)
 
 let mut grad = Gradient::of(fin, context);
 
-// Take gradient with respect to x - has value: 
+// Take gradient with respect to x 
 grad.grad(x);
+// Or with respect to y
 grad.grad(y);
 
 // We can also change the initial seed values and recompute:

@@ -2,61 +2,8 @@
 //!
 //! This module contains differentiable wrapper functions.
 
-use super::{Expression, VecJacProduct, Node, Context, IdentityVJP};
-
-/// Addition operation
-pub struct Add<X: Expression, Y: Expression>(pub X, pub Y);
-
-impl<X: Expression, Y: Expression> Expression for Add<X, Y> {
-    fn eval(&self, c: &mut Context) -> Node {
-        let x_eval = self.0.eval(c);
-        let y_eval = self.1.eval(c);
-
-        let parents = vec![x_eval, y_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node {
-            index: c.get_index(),
-            value: parents[0].value + parents[1].value,
-            parents: parents,
-            progenitors: progenitors,
-            _vjp: Box::new(IdentityVJP)
-        }
-    }
-}
-
-/// Multiplication operation
-pub struct Mul<X: Expression, Y: Expression>(pub X, pub Y);
-
-struct MulVJP(f64, f64);
-
-impl VecJacProduct for MulVJP {
-    fn vjp(&self, g: f64, _: &Node, argnum: usize) -> f64 {
-        match argnum {
-            0 => g * self.1,
-            1 => g * self.0,
-            _ => panic!("Invalid argnum fed to Mul VJP"),
-        }
-    }
-}
-
-impl<X: Expression, Y: Expression> Expression for Mul<X, Y> {
-    fn eval(&self, c: &mut Context) -> Node {
-        let x_eval = self.0.eval(c);
-        let y_eval = self.1.eval(c);
-
-        let parents = vec![x_eval, y_eval];
-        let progenitors = Node::get_progenitors(&parents);
-        let (v1, v2) = (parents[0].value, parents[1].value);
-        Node {
-            index: c.get_index(),
-            value: v1 * v2,
-            parents: parents,
-            progenitors: progenitors,
-            _vjp: Box::new(MulVJP(v1, v2))
-        }
-    }
-}
+use super::{Expression, VecJacProduct, Node};
+use super::{Container, Context};
 
 struct LinVJP<F: Fn(f64) -> f64>(F);
 
@@ -67,7 +14,7 @@ impl<F: Fn(f64) -> f64> VecJacProduct for LinVJP<F> {
 }
 
 /// Sine operator
-pub struct Sin<X: Expression>(pub X);
+pub struct Sin<X: Expression>(X);
 
 impl<X: Expression> Expression for Sin<X> {
     fn eval(&self, c: &mut Context) -> Node {
@@ -85,8 +32,15 @@ impl<X: Expression> Expression for Sin<X> {
     }
 }
 
+/// Sine function
+pub fn sin<E>(x: Container<E>) -> Container<Sin<E>>
+    where E: Expression
+{
+    Container(Sin(x.0))
+}
+
 /// Cosine operator
-pub struct Cos<X: Expression>(pub X);
+pub struct Cos<X: Expression>(X);
 
 impl<X: Expression> Expression for Cos<X> {
     fn eval(&self, c: &mut Context) -> Node {
@@ -104,8 +58,15 @@ impl<X: Expression> Expression for Cos<X> {
     }
 }
 
+/// Cosine function
+pub fn cos<E>(x: Container<E>) -> Container<Cos<E>>
+    where E: Expression
+{
+    Container(Cos(x.0))
+}
+
 /// Exponential operator
-pub struct Exp<X: Expression>(pub X);
+pub struct Exp<X: Expression>(X);
 
 impl<X: Expression> Expression for Exp<X> {
     fn eval(&self, c: &mut Context) -> Node {
@@ -123,8 +84,15 @@ impl<X: Expression> Expression for Exp<X> {
     }
 }
 
+/// Exponential function
+pub fn exp<E>(x: Container<E>) -> Container<Exp<E>>
+    where E: Expression
+{
+    Container(Exp(x.0))
+}
+
 /// Natural Logarithm operator
-pub struct Ln<X: Expression>(pub X);
+pub struct Ln<X: Expression>(X);
 
 impl<X: Expression> Expression for Ln<X> {
     fn eval(&self, c: &mut Context) -> Node {
@@ -142,8 +110,15 @@ impl<X: Expression> Expression for Ln<X> {
     }
 }
 
+/// Natural Logarithm function
+pub fn ln<E>(x: Container<E>) -> Container<Ln<E>>
+    where E: Expression
+{
+    Container(Ln(x.0))
+}
+
 /// Power raising operation
-pub struct Powf<X: Expression>(pub X, pub f64);
+pub struct Powf<X: Expression>(X, f64);
 
 impl<X: Expression> Expression for Powf<X> {
     fn eval(&self, c: &mut Context) -> Node {
@@ -162,10 +137,18 @@ impl<X: Expression> Expression for Powf<X> {
     }
 }
 
+/// Power raising function
+pub fn powf<E>(x: Container<E>, n: f64) -> Container<Powf<E>>
+    where E: Expression
+{
+    Container(Powf(x.0, n))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::{Node, Context, Expression, IdentityVJP, VecJacProduct};
+    use ::{Add, Mul, Node, Context};
+    use ::{Expression, IdentityVJP, VecJacProduct};
 
     pub struct TestVar(f64);
 

@@ -16,17 +16,9 @@
 //! let y = context.create_variable(0.3);
 //!
 //! // Below we build: y * sin(x) + cos(y)
-//! // Take sin of x
-//! let f = Sin(x);
-//!     
-//! // Multiply f with y
-//! let g = Mul(y, f);
+//! let f = y * sin(x) + cos(y);
 //!
-//! // Take cos(y) and add it to g
-//! let h = Cos(y);
-//! let fin = Add(h, g);
-//!
-//! let mut grad = Gradient::of(fin, context);
+//! let mut grad = Gradient::of(f, context);
 //!
 //! // Take gradient with respect to x - has value: 
 //! grad.grad(x);
@@ -41,11 +33,27 @@
 
 pub mod functions;
 mod iter;
+mod op_overrides;
 
 use std::collections::HashMap;
 use std::f64;
 
 use iter::reverse_topology;
+
+/// Container which wraps an expression
+///
+/// This container exists to bypass Rust's
+/// 'Orphan Rules'. By using the container we can
+/// overload arithmetic operations to give a nicer
+/// user experience. 
+#[derive(Clone, Copy)]
+pub struct Container<E: Expression>(E);
+
+impl<E: Expression> Expression for Container<E> {
+    fn eval(&self, c: &mut Context) -> Node {
+        self.0.eval(c)
+    }
+}
 
 /// The Gradient of an Expression
 ///
@@ -63,17 +71,16 @@ impl<'a, E: Expression> Gradient<E> {
     ///
     /// ```
     /// use rugrads::{Gradient, Context};
-    /// use rugrads::functions::Add;
     ///
     /// let mut context = Context::new();
     /// let x = context.create_variable(2.0);
-    /// let f = Add(x, x);
+    /// let f = x + x;
     ///
     /// let grad = Gradient::of(f, context);
     /// ```
-    pub fn of(expr: E, context: Context) -> Self {
+    pub fn of(expr: Container<E>, context: Context) -> Self {
         Gradient {
-            expr: expr,
+            expr: expr.0,
             context: context,
         }
     }
@@ -87,7 +94,7 @@ impl<'a, E: Expression> Gradient<E> {
 
     /// Compute the gradient with respect to the given
     /// `Variable`.
-    pub fn grad(&mut self, wrt: Variable) -> f64 {
+    pub fn grad(&mut self, wrt: Container<Variable>) -> f64 {
         // Reset the context
         self.context.node_count = 0;
 
@@ -99,7 +106,7 @@ impl<'a, E: Expression> Gradient<E> {
         node_in_grads.insert(end.index, vec![1f64]);
         let mut cur_in_grad = 1f64;
 
-        for node in reverse_topology(&end, wrt.0) {
+        for node in reverse_topology(&end, (wrt.0).0) {
             if !node_in_grads.contains_key(&node.index) {
                 continue;
             } else {
@@ -149,10 +156,10 @@ impl Context {
     /// let mut c = Context::new();
     /// let x = c.create_variable(2.5);
     /// ```
-    pub fn create_variable(&mut self, value: f64) -> Variable {
+    pub fn create_variable(&mut self, value: f64) -> Container<Variable> {
         let var_idx = self.vars.len();
         self.vars.push(value);
-        Variable(var_idx)
+        Container(Variable(var_idx))
     }
 
     /// Create a new `Context`
@@ -195,8 +202,8 @@ impl Context {
     ///
     /// More accurately - if the `Variable` has an index which is too
     /// large for this context.
-    pub fn set_variable_value(&mut self, var: Variable, value: f64) {
-        self.vars[var.0] = value;
+    pub fn set_variable_value(&mut self, var: Container<Variable>, value: f64) {
+        self.vars[(var.0).0] = value;
     }
 }
 
@@ -258,6 +265,60 @@ impl Expression for Variable {
     }
 }
 
+/// Addition operation
+pub struct Add<X: Expression, Y: Expression>(X, Y);
+
+impl<X: Expression, Y: Expression> Expression for Add<X, Y> {
+    fn eval(&self, c: &mut Context) -> Node {
+        let x_eval = self.0.eval(c);
+        let y_eval = self.1.eval(c);
+
+        let parents = vec![x_eval, y_eval];
+        let progenitors = Node::get_progenitors(&parents);
+
+        Node {
+            index: c.get_index(),
+            value: parents[0].value + parents[1].value,
+            parents: parents,
+            progenitors: progenitors,
+            _vjp: Box::new(IdentityVJP)
+        }
+    }
+}
+
+/// Multiplication operation
+pub struct Mul<X: Expression, Y: Expression>(X, Y);
+
+struct MulVJP(f64, f64);
+
+impl VecJacProduct for MulVJP {
+    fn vjp(&self, g: f64, _: &Node, argnum: usize) -> f64 {
+        match argnum {
+            0 => g * self.1,
+            1 => g * self.0,
+            _ => panic!("Invalid argnum fed to Mul VJP"),
+        }
+    }
+}
+
+impl<X: Expression, Y: Expression> Expression for Mul<X, Y> {
+    fn eval(&self, c: &mut Context) -> Node {
+        let x_eval = self.0.eval(c);
+        let y_eval = self.1.eval(c);
+
+        let parents = vec![x_eval, y_eval];
+        let progenitors = Node::get_progenitors(&parents);
+        let (v1, v2) = (parents[0].value, parents[1].value);
+        Node {
+            index: c.get_index(),
+            value: v1 * v2,
+            parents: parents,
+            progenitors: progenitors,
+            _vjp: Box::new(MulVJP(v1, v2))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,7 +328,7 @@ mod tests {
     fn test_basic_sum() {
         let mut context = Context::new();
         let x = context.create_variable(1.0);
-        let f = Add(x, x);
+        let f = x + x;
 
         assert_eq!(f.eval(&mut context).value, 2f64);
 
@@ -279,7 +340,7 @@ mod tests {
     fn test_basic_sin() {
         let mut context = Context::new();
         let x = context.create_variable(1.0);
-        let f = Sin(x);
+        let f = sin(x);
 
         assert!((f.eval(&mut context).value - 0.84147098).abs() < 1e-5);
 
@@ -294,12 +355,11 @@ mod tests {
     fn test_sum_x_sinx() {
         let mut context = Context::new();
         let x = context.create_variable(0.5);
-        let f = Sin(x);
-        let g = Add(x, f);
+        let f = x + sin(x);
         
-        assert!((g.eval(&mut context).value - 0.979425538f64).abs() < 1e-5);
+        assert!((f.eval(&mut context).value - 0.979425538f64).abs() < 1e-5);
         
-        let mut grad = Gradient::of(g, context);
+        let mut grad = Gradient::of(f, context);
         assert!((grad.grad(x) - 1.87758256).abs() < 1e-5);
     }
 
@@ -308,7 +368,7 @@ mod tests {
         let mut context = Context::new();
         let x = context.create_variable(0.5);
         let y = context.create_variable(1.0);
-        let f = Mul(x, y);
+        let f = x * y;
 
         assert!((f.eval(&mut context).value - 0.5).abs() < 1e-5);
         
