@@ -31,10 +31,13 @@
 
 #![deny(missing_docs)]
 
+extern crate num;
+
 pub mod functions;
 mod iter;
 
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::f64;
 
 use iter::reverse_topology;
@@ -46,11 +49,23 @@ use iter::reverse_topology;
 /// overload arithmetic operations to give a nicer
 /// user experience. 
 #[derive(Clone, Copy)]
-pub struct Container<E: Expression>(E);
+pub struct Container<T, E: Expression<T>> {
+    inner: E,
+    _marker: PhantomData<T>,
+}
 
-impl<E: Expression> Expression for Container<E> {
-    fn eval(&self, c: &mut Context) -> Node {
-        self.0.eval(c)
+impl<T, E: Expression<T>> Expression<T> for Container<T, E> {
+    fn eval(&self, c: &mut Context<T>) -> Node<T> {
+        self.inner.eval(c)
+    }
+}
+
+impl<T, E: Expression<T>> Container<T, E> {
+    fn new(e: E) -> Self {
+        Container {
+            inner: e,
+            _marker: PhantomData::<T>,
+        }
     }
 }
 
@@ -58,12 +73,12 @@ impl<E: Expression> Expression for Container<E> {
 ///
 /// This struct can be used to evaluate the gradient of
 /// a given expression.
-pub struct Gradient<E: Expression> {
+pub struct Gradient<T, E: Expression<T>> {
     expr: E,
-    context: Context
+    context: Context<T>
 }
 
-impl<'a, E: Expression> Gradient<E> {
+impl<T, E: Expression<T>> Gradient<T, E> {
     /// Take the gradient of an expression in some context
     ///
     /// # Examples
@@ -77,9 +92,9 @@ impl<'a, E: Expression> Gradient<E> {
     ///
     /// let grad = Gradient::of(f, context);
     /// ```
-    pub fn of(expr: Container<E>, context: Context) -> Self {
+    pub fn of(expr: Container<T, E>, context: Context<T>) -> Self {
         Gradient {
-            expr: expr.0,
+            expr: expr.inner,
             context: context,
         }
     }
@@ -87,13 +102,15 @@ impl<'a, E: Expression> Gradient<E> {
     /// Gets the context for this gradient
     /// 
     /// You can use the context to set variable values.
-    pub fn context(&mut self) -> &mut Context {
+    pub fn context(&mut self) -> &mut Context<T> {
         &mut self.context
     }
+}
 
+impl<E: Expression<f64>> Gradient<f64, E> {
     /// Compute the gradient with respect to the given
     /// `Variable`.
-    pub fn grad(&mut self, wrt: Container<Variable>) -> f64 {
+    pub fn grad(&mut self, wrt: Container<f64, Variable>) -> f64 {
         // Reset the context
         self.context.node_count = 0;
 
@@ -105,7 +122,7 @@ impl<'a, E: Expression> Gradient<E> {
         node_in_grads.insert(end.index, vec![1f64]);
         let mut cur_in_grad = 1f64;
 
-        for node in reverse_topology(&end, (wrt.0).0) {
+        for node in reverse_topology(&end, wrt.inner.0) {
             if !node_in_grads.contains_key(&node.index) {
                 continue;
             } else {
@@ -122,13 +139,13 @@ impl<'a, E: Expression> Gradient<E> {
 }
 
 /// An expression which can be evaluated
-pub trait Expression {
+pub trait Expression<T> {
     /// Evaluate the expression in the given context
-    fn eval(&self, c: &mut Context) -> Node;
+    fn eval(&self, c: &mut Context<T>) -> Node<T>;
 }
 
-trait VecJacProduct {
-    fn vjp(&self, g: f64, node: &Node, argnum: usize) -> f64;
+trait VecJacProduct<T> {
+    fn vjp(&self, g: T, node: &Node<T>, argnum: usize) -> T;
 }
 
 /// The context for a computational expression
@@ -139,30 +156,14 @@ trait VecJacProduct {
 /// The user is responsible for managing `Variable`s
 /// within a context. This means that the user should ensure
 /// that they do not mix up variables between different contexts.
-pub struct Context {
-    vars: Vec<f64>,
+pub struct Context<T> {
+    vars: Vec<T>,
     node_count: usize,
 }
 
-impl Context {
-    /// Create a new `Variable` with the given value
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use rugrads::Context;
-    ///
-    /// let mut c = Context::new();
-    /// let x = c.create_variable(2.5);
-    /// ```
-    pub fn create_variable(&mut self, value: f64) -> Container<Variable> {
-        let var_idx = self.vars.len();
-        self.vars.push(value);
-        Container(Variable(var_idx))
-    }
-
+impl<T> Context<T> {
     /// Create a new `Context`
-    pub fn new() -> Context {
+    pub fn new() -> Context<T> {
         Context {
             vars: vec![],
             node_count: 0,
@@ -174,9 +175,26 @@ impl Context {
         self.node_count += 1;
         idx
     }
+}
+impl<T: Clone> Context<T> {
+    /// Create a new `Variable` with the given value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rugrads::Context;
+    ///
+    /// let mut c = Context::new();
+    /// let x = c.create_variable(2.5);
+    /// ```
+    pub fn create_variable(&mut self, value: T) -> Container<T, Variable> {
+        let var_idx = self.vars.len();
+        self.vars.push(value);
+        Container::new(Variable(var_idx))
+    }
 
-    fn get_variable_value(&self, var: Variable) -> f64 {
-        self.vars[var.0]
+    fn get_variable_value(&self, var: Variable) -> T {
+        self.vars[var.0].clone()
     }
 
     /// Set the given variable value
@@ -201,8 +219,8 @@ impl Context {
     ///
     /// More accurately - if the `Variable` has an index which is too
     /// large for this context.
-    pub fn set_variable_value(&mut self, var: Container<Variable>, value: f64) {
-        self.vars[(var.0).0] = value;
+    pub fn set_variable_value(&mut self, var: Container<T, Variable>, value: T) {
+        self.vars[var.inner.0] = value;
     }
 }
 
@@ -210,22 +228,22 @@ impl Context {
 ///
 /// When we evaluate an expression we create
 /// a graph made up of nodes.
-pub struct Node {
+pub struct Node<'a, T> {
     index: usize,
-    value: f64,
-    parents: Vec<Node>,
+    value: T,
+    parents: Vec<Node<'a, T>>,
     progenitors: Vec<usize>,
-    _vjp: Box<VecJacProduct>,
+    _vjp: Box<VecJacProduct<T> + 'a>,
 }
 
-impl VecJacProduct for Node {
-    fn vjp(&self, g: f64, node: &Node, argnum: usize) -> f64 {
+impl<'a, T> VecJacProduct<T> for Node<'a, T> {
+    fn vjp(&self, g: T, node: &Node<T>, argnum: usize) -> T {
         self._vjp.vjp(g, node, argnum)
     }
 }
 
-impl Node {
-    fn get_progenitors(parents: &Vec<Node>) -> Vec<usize> {
+impl<'a, T> Node<'a, T> {
+    fn get_progenitors(parents: &Vec<Node<'a, T>>) -> Vec<usize> {
         let mut progenitors = parents.iter().map(|p| p.index).collect::<Vec<usize>>();
         for parent in parents.iter() {
             for prog in parent.progenitors.iter() {
@@ -246,14 +264,14 @@ pub struct Variable(usize);
 
 struct IdentityVJP;
 
-impl VecJacProduct for IdentityVJP {
-    fn vjp(&self, g: f64, _: &Node, _: usize) -> f64 {
+impl<T> VecJacProduct<T> for IdentityVJP {
+    fn vjp(&self, g: T, _: &Node<T>, _: usize) -> T {
         g
     }
 }
 
-impl Expression for Variable {
-    fn eval(&self, c: &mut Context) -> Node {
+impl<T: Clone> Expression<T> for Variable {
+    fn eval(&self, c: &mut Context<T>) -> Node<T> {
         Node {
             index: self.0,
             value: c.get_variable_value(*self),
@@ -268,6 +286,8 @@ impl Expression for Variable {
 mod tests {
     use super::*;
     use super::functions::*;
+
+    use num::Float;
 
     #[test]
     fn test_basic_sum() {

@@ -1,45 +1,68 @@
 use std::ops;
+use std::marker::PhantomData;
+
+use num::Float;
 
 use ::{Expression, Container};
 use super::{Add, Mul, Div, Sub, Neg};
 
-impl<E1: Expression, E2: Expression> ops::Add<Container<E2>> for Container<E1> {
-    type Output = Container<Add<E1,E2>>;
+impl<T, E1, E2> ops::Add<Container<T, E2>> for Container<T, E1>
+    where for<'a, 'b> &'a T: ops::Add<&'b T, Output=T>,
+        E1: Expression<T>,
+        E2: Expression<T> 
+{
+    type Output = Container<T, Add<T, E1,E2>>;
 
-    fn add(self, rhs: Container<E2>)-> Container<Add<E1,E2>> {
-        Container(Add(self.0, rhs.0))
+    fn add(self, rhs: Container<T, E2>)-> Container<T, Add<T, E1,E2>> {
+        Container::new(Add::new(self.inner, rhs.inner))
     }
 }
 
-impl<E1: Expression, E2: Expression> ops::Mul<Container<E2>> for Container<E1> {
-    type Output = Container<Mul<E1,E2>>;
+impl<T, E1, E2> ops::Mul<Container<T, E2>> for Container<T, E1>
+    where T: Float,
+        E1: Expression<T>,
+        E2: Expression<T> 
+{
+    type Output = Container<T, Mul<T, E1, E2>>;
 
-    fn mul(self, rhs: Container<E2>)-> Container<Mul<E1,E2>> {
-        Container(Mul(self.0, rhs.0))
+    fn mul(self, rhs: Container<T, E2>)-> Container<T, Mul<T, E1, E2>> {
+        Container::new(Mul::new(self.inner, rhs.inner))
     }
 }
 
-impl<E1: Expression, E2: Expression> ops::Div<Container<E2>> for Container<E1> {
-    type Output = Container<Div<E1,E2>>;
+impl<T, E1, E2> ops::Div<Container<T, E2>> for Container<T, E1>
+    where T: Float,
+        E1: Expression<T>,
+        E2: Expression<T>        
+{
+    type Output = Container<T, Div<T, E1,E2>>;
 
-    fn div(self, rhs: Container<E2>)-> Container<Div<E1,E2>> {
-        Container(Div(self.0, rhs.0))
+    fn div(self, rhs: Container<T, E2>)-> Container<T, Div<T, E1, E2>> {
+        Container::new(Div::new(self.inner, rhs.inner))
     }
 }
 
-impl<E1: Expression, E2: Expression> ops::Sub<Container<E2>> for Container<E1> {
-    type Output = Container<Sub<E1,E2>>;
+impl<T, E1, E2> ops::Sub<Container<T, E2>> for Container<T, E1>
+    where for<'a, 'b> &'a T: ops::Sub<&'b T, Output=T>,
+        T: ops::Neg<Output=T>,
+        E1: Expression<T>,
+        E2: Expression<T> 
+{
+    type Output = Container<T, Sub<T, E1,E2>>;
 
-    fn sub(self, rhs: Container<E2>)-> Container<Sub<E1,E2>> {
-        Container(Sub(self.0, rhs.0))
+    fn sub(self, rhs: Container<T, E2>)-> Container<T, Sub<T, E1,E2>> {
+        Container::new(Sub::new(self.inner, rhs.inner))
     }
 }
 
-impl<E: Expression> ops::Neg for Container<E> {
-    type Output = Container<Neg<E>>;
+impl<T, E> ops::Neg for Container<T, E>
+    where T: Clone + ops::Neg<Output=T>,
+          E: Expression<T>
+{
+    type Output = Container<T, Neg<T, E>>;
 
-    fn neg(self)-> Container<Neg<E>> {
-        Container(Neg(self.0))
+    fn neg(self)-> Container<T, Neg<T, E>> {
+        Container::new(Neg(self.inner, PhantomData::<T>))
     }
 }
 
@@ -47,6 +70,7 @@ impl<E: Expression> ops::Neg for Container<E> {
 mod tests {
     use ::{Expression, Gradient, Context};
     use std::f64;
+    use num::Float;
 
     #[test]
     fn test_add_op() {

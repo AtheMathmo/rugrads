@@ -30,7 +30,7 @@ let y = context.create_variable(0.3);
 // Below we build: y * sin(x) + cos(y)
 let f = y * sin(x) + cos(y)
 
-let mut grad = Gradient::of(fin, context);
+let mut grad = Gradient::of(f, context);
 
 // Take gradient with respect to x 
 grad.grad(x);

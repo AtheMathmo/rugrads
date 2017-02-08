@@ -2,7 +2,7 @@ use super::Node;
 
 use std::collections::HashMap;
 
-fn relevant_parents(parents: &Vec<Node>, start_idx: usize) -> Vec<&Node> {
+fn relevant_parents<'a, 'b, T>(parents: &'b Vec<Node<'a, T>>, start_idx: usize) -> Vec<&'b Node<'a, T>> {
     parents.iter()
             .filter(|p| {
                 p.progenitors.contains(&start_idx) || p.index == start_idx
@@ -10,7 +10,7 @@ fn relevant_parents(parents: &Vec<Node>, start_idx: usize) -> Vec<&Node> {
             .collect()
 }
 
-pub fn reverse_topology<'a>(end: &'a Node, start_idx: usize) -> RevTopology<'a> {
+pub fn reverse_topology<'a, 'b, T: 'a>(end: &'a Node<'b, T>, start_idx: usize) -> RevTopology<'a, 'b, T> {
     let mut child_counts = HashMap::new();
     {
         let mut stack = vec![end];
@@ -22,26 +22,24 @@ pub fn reverse_topology<'a>(end: &'a Node, start_idx: usize) -> RevTopology<'a> 
             stack.extend(relevant_parents(&node.parents, start_idx));
         }
     }
-    let mut data = Vec::<&'a Node>::new();
-    data.push(end);
 
     RevTopology {
         start: start_idx,
         child_counts: child_counts,
-        childless_nodes: data,
+        childless_nodes: vec![end],
     }
 }
 
-pub struct RevTopology<'a> {
+pub struct RevTopology<'a, 'b: 'a, T: 'a> {
     start: usize,
     child_counts: HashMap<usize, usize>,
-    childless_nodes: Vec<&'a Node>
+    childless_nodes: Vec<&'a Node<'b, T>>
 }
 
-impl<'a> Iterator for RevTopology<'a> {
-    type Item = &'a Node;
+impl<'a, 'b, T: 'a> Iterator for RevTopology<'a, 'b, T> {
+    type Item = &'a Node<'b, T>;
 
-    fn next(&mut self) -> Option<&'a Node> {
+    fn next(&mut self) -> Option<&'a Node<'b, T>> {
         if let Some(node) = self.childless_nodes.pop() {
             for p in relevant_parents(&node.parents, self.start) {
                 let mut cc = self.child_counts.get_mut(&p.index)
