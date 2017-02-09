@@ -35,10 +35,11 @@ extern crate num;
 
 pub mod functions;
 mod iter;
+mod utils;
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::f64;
+use std::ops::Add;
 
 use iter::reverse_topology;
 
@@ -61,11 +62,22 @@ impl<T, E: Expression<T>> Expression<T> for Container<T, E> {
 }
 
 impl<T, E: Expression<T>> Container<T, E> {
-    fn new(e: E) -> Self {
+    /// Creates a new container which wraps the expression
+    pub fn new(e: E) -> Self {
         Container {
             inner: e,
             _marker: PhantomData::<T>,
         }
+    }
+
+    /// Returns a pointer to the inner value
+    pub fn inner(&self) -> &E {
+        &self.inner
+    }
+
+    /// Consumes the container and returns the inner expression
+    pub fn into_inner(self) -> E {
+        self.inner
     }
 }
 
@@ -107,10 +119,11 @@ impl<T, E: Expression<T>> Gradient<T, E> {
     }
 }
 
-impl<E: Expression<f64>> Gradient<f64, E> {
-    /// Compute the gradient with respect to the given
-    /// `Variable`.
-    pub fn grad(&mut self, wrt: Container<f64, Variable>) -> f64 {
+impl<T: Clone + Add<Output=T>, E: Expression<T>> Gradient<T, E> {
+    /// Back propagates the gradient with some starting seed.
+    ///
+    /// This seed should always be set to 1. 
+    pub fn backprop(&mut self, wrt: Container<T, Variable>, seed: T) -> T {
         // Reset the context
         self.context.node_count = 0;
 
@@ -119,16 +132,17 @@ impl<E: Expression<f64>> Gradient<f64, E> {
 
         // Backward prop
         let mut node_in_grads = HashMap::new();
-        node_in_grads.insert(end.index, vec![1f64]);
-        let mut cur_in_grad = 1f64;
+        node_in_grads.insert(end.index, vec![seed]);
 
+        let mut cur_in_grad = utils::assigning_sum(&node_in_grads[&end.index]);
         for node in reverse_topology(&end, wrt.inner.0) {
             if !node_in_grads.contains_key(&node.index) {
+                // This ensures we don't try to sum an empty in_grads vec
                 continue;
             } else {
-                cur_in_grad = node_in_grads[&node.index].iter().sum();
+                cur_in_grad = utils::assigning_sum(&node_in_grads[&node.index]);
                 for (argnum, p_node) in node.parents.iter().enumerate() {
-                    let in_grad = node.vjp(cur_in_grad, p_node, argnum);
+                    let in_grad = node.vjp(cur_in_grad.clone(), p_node, argnum);
                     node_in_grads.entry(p_node.index).or_insert(vec![]).push(in_grad);
                 }
             }
@@ -138,13 +152,23 @@ impl<E: Expression<f64>> Gradient<f64, E> {
     }
 }
 
+impl<T: num::Float, E: Expression<T>> Gradient<T, E> {
+    /// Compute the gradient with respect to the given
+    /// `Variable`.
+    pub fn grad(&mut self, wrt: Container<T, Variable>) -> T {
+        self.backprop(wrt, T::one())
+    }
+}
+
 /// An expression which can be evaluated
 pub trait Expression<T> {
     /// Evaluate the expression in the given context
     fn eval(&self, c: &mut Context<T>) -> Node<T>;
 }
 
-trait VecJacProduct<T> {
+/// The Vector-Jacobian product of gradients
+pub trait VecJacProduct<T> {
+    /// The vjp function which determines how the gradient is back propagated
     fn vjp(&self, g: T, node: &Node<T>, argnum: usize) -> T;
 }
 
@@ -193,7 +217,7 @@ impl<T: Clone> Context<T> {
         Container::new(Variable(var_idx))
     }
 
-    fn get_variable_value(&self, var: Variable) -> T {
+    fn get_variable_value(&self, var: &Variable) -> T {
         self.vars[var.0].clone()
     }
 
@@ -243,7 +267,21 @@ impl<'a, T> VecJacProduct<T> for Node<'a, T> {
 }
 
 impl<'a, T> Node<'a, T> {
-    fn get_progenitors(parents: &Vec<Node<'a, T>>) -> Vec<usize> {
+    /// Returns a new node in the given context
+    pub fn new(c: &mut Context<T>, value: T,
+                parents: Vec<Node<'a, T>>, progenitors: Vec<usize>,
+                vjp: Box<VecJacProduct<T> + 'a>) -> Self {
+        Node {
+            index: c.get_index(),
+            value: value,
+            parents: parents,
+            progenitors: progenitors,
+            _vjp: vjp
+        }
+    }
+
+    /// Gets the progenitors of all parents
+    pub fn get_progenitors(parents: &Vec<Node<'a, T>>) -> Vec<usize> {
         let mut progenitors = parents.iter().map(|p| p.index).collect::<Vec<usize>>();
         for parent in parents.iter() {
             for prog in parent.progenitors.iter() {
@@ -254,6 +292,11 @@ impl<'a, T> Node<'a, T> {
         }
         progenitors
     }
+
+    /// Returns a reference to the underlying node value.
+    pub fn value(&self) -> &T {
+        &self.value
+    }
 }
 
 /// A Variable
@@ -261,6 +304,14 @@ impl<'a, T> Node<'a, T> {
 /// Each variable specifies an index into a Context.
 #[derive(Clone, Copy)]
 pub struct Variable(usize);
+
+impl Variable {
+    /// Returns a reference to the underlying `Variable` value
+    /// in this context.
+    pub fn value<'a, T: 'a>(&self, c: &'a Context<T>) -> &'a T {
+        &c.vars[self.0]
+    }
+}
 
 struct IdentityVJP;
 
@@ -274,7 +325,7 @@ impl<T: Clone> Expression<T> for Variable {
     fn eval(&self, c: &mut Context<T>) -> Node<T> {
         Node {
             index: self.0,
-            value: c.get_variable_value(*self),
+            value: c.get_variable_value(self),
             parents: vec![],
             progenitors: vec![],
             _vjp: Box::new(IdentityVJP)

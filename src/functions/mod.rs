@@ -10,9 +10,9 @@ use num::Float;
 use ::{Node, Context, Expression, VecJacProduct, IdentityVJP};
 
 mod op_overrides;
-mod ext;
+mod float;
 
-pub use self::ext::{sin, cos, exp, ln, powf};
+pub use self::float::{sin, cos, exp, ln, powf};
 
 /// Addition operation
 pub struct Add<T, X, Y>
