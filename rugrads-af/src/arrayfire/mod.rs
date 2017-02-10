@@ -37,11 +37,33 @@ impl<X: Expression<Array>> Expression<Array> for $name<X> {
 
 univariate_wrapper!(Sin, libaf::sin, libaf::cos);
 univariate_wrapper!(Cos, libaf::cos, |x| -libaf::sin(x));
+univariate_wrapper!(Tan, libaf::tan, |x| {
+    let ones = libaf::constant(1f64, x.dims());
+    let cos_x = libaf::cos(x);
+    libaf::div(&ones, &libaf::mul(&cos_x, &cos_x, false), false)
+});
 univariate_wrapper!(Sinh, libaf::sinh, libaf::cosh);
 univariate_wrapper!(Cosh, libaf::cosh, libaf::sinh);
-
-pub struct Tan<X: Expression<Array>>(X);
-
+univariate_wrapper!(Tanh, libaf::tanh, |x| {
+    let ones = libaf::constant(1f64, x.dims());
+    let cosh_x = libaf::cosh(x);
+    libaf::div(&ones, &libaf::mul(&cosh_x, &cosh_x, false), false)
+});
+univariate_wrapper!(Arcsin, libaf::asin, |x| {
+    let ones = libaf::constant(1f64, x.dims());
+    let x_sq = libaf::sub(&ones, &libaf::pow(x, &2f64, false), false);
+    libaf::div(&ones, &x_sq, false)
+});
+univariate_wrapper!(Arccos, libaf::acos, |x| {
+    let ones = libaf::constant(1f64, x.dims());
+    let x_sq = libaf::sub(&ones, &libaf::pow(x, &2f64, false), false);
+    -libaf::div(&ones, &x_sq, false)
+});
+univariate_wrapper!(Arctan, libaf::atan, |x| {
+    let ones = libaf::constant(1f64, x.dims());
+    let x_sq = libaf::add(&ones, &libaf::pow(x, &2f64, false), false);
+    libaf::div(&ones, &x_sq, false)
+});
 univariate_wrapper!(Exp, libaf::exp, libaf::exp);
 univariate_wrapper!(Log, libaf::log, move |x| libaf::pow(x, &-1f64, false));
 

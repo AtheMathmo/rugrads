@@ -18,8 +18,13 @@ pub fn $f_name<E: Expression<Array>>(input: Container<E>) -> Container<$struct_n
 
 univar_wrapper_func!(sin, Sin, "Sine");
 univar_wrapper_func!(cos, Cos, "Cosine");
+univar_wrapper_func!(tan, Tan, "Tangent");
 univar_wrapper_func!(sinh, Sinh, "Hyperbolic Sine");
 univar_wrapper_func!(cosh, Cosh, "Hyperbolic Cosine");
+univar_wrapper_func!(tanh, Tanh, "Hyperbolic Tangent");
+univar_wrapper_func!(asin, Arcsin, "Arcsin");
+univar_wrapper_func!(acos, Arccos, "Arccos");
+univar_wrapper_func!(atan, Arctan, "Arctan");
 univar_wrapper_func!(exp, Exp, "Exponent");
 univar_wrapper_func!(log, Log, "Natural Logarithm");
 
