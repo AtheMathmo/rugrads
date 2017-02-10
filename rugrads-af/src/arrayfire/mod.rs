@@ -18,59 +18,34 @@ impl<F> VecJacProduct<Array> for LinVJP<F>
     }
 }
 
-pub struct Sin<X: Expression<Array>>(X);
+macro_rules! univariate_wrapper {
+    ($name: ident, $af_func: expr, $vjp: expr) => {
+pub struct $name<X: Expression<Array>>(X);
 
-impl<X: Expression<Array>> Expression<Array> for Sin<X> {
+impl<X: Expression<Array>> Expression<Array> for $name<X> {
     fn eval(&self, c: &mut Context) -> Node<Array> {
         let x_eval = self.0.eval(c);
         let parents = vec![x_eval];
         let progenitors = Node::get_progenitors(&parents);
 
-        Node::new(c, libaf::sin(parents[0].value()),
-                    parents, progenitors, Box::new(LinVJP(libaf::cos)))
+        Node::new(c, $af_func(parents[0].value()),
+                    parents, progenitors, Box::new(LinVJP($vjp)))
     }
 }
-
-pub struct Cos<X: Expression<Array>>(X);
-
-impl<X: Expression<Array>> Expression<Array> for Cos<X> {
-    fn eval(&self, c: &mut Context) -> Node<Array> {
-        let x_eval = self.0.eval(c);
-        let parents = vec![x_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node::new(c, libaf::cos(parents[0].value()),
-                    parents, progenitors, Box::new(LinVJP(|x| -libaf::sin(x))))
-    }
+    };
 }
 
-pub struct Exp<X: Expression<Array>>(X);
+univariate_wrapper!(Sin, libaf::sin, libaf::cos);
+univariate_wrapper!(Cos, libaf::cos, |x| -libaf::sin(x));
+univariate_wrapper!(Sinh, libaf::sinh, libaf::cosh);
+univariate_wrapper!(Cosh, libaf::cosh, libaf::sinh);
 
-impl<X: Expression<Array>> Expression<Array> for Exp<X> {
-    fn eval(&self, c: &mut Context) -> Node<Array> {
-        let x_eval = self.0.eval(c);
-        let parents = vec![x_eval];
-        let progenitors = Node::get_progenitors(&parents);
+pub struct Tan<X: Expression<Array>>(X);
 
-        Node::new(c, libaf::exp(parents[0].value()),
-                    parents, progenitors, Box::new(LinVJP(libaf::exp)))
-    }
-}
+univariate_wrapper!(Exp, libaf::exp, libaf::exp);
+univariate_wrapper!(Log, libaf::log, move |x| libaf::pow(x, &-1f64, false));
 
-pub struct Log<X: Expression<Array>>(X);
-
-impl<X: Expression<Array>> Expression<Array> for Log<X> {
-    fn eval(&self, c: &mut Context) -> Node<Array> {
-        let x_eval = self.0.eval(c);
-        let parents = vec![x_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node::new(c, libaf::log(parents[0].value()),
-                    parents, progenitors, Box::new(LinVJP(move |x| libaf::pow(x, &-1, false))))
-    }
-}
-
-pub struct Pow<X: Expression<Array>>(X, i64);
+pub struct Pow<X: Expression<Array>>(X, f64);
 
 impl<X: Expression<Array>> Expression<Array> for Pow<X> {
     fn eval(&self, c: &mut Context) -> Node<Array> {
@@ -79,32 +54,6 @@ impl<X: Expression<Array>> Expression<Array> for Pow<X> {
         let progenitors = Node::get_progenitors(&parents);
 
         Node::new(c, libaf::pow(parents[0].value(), &self.1, false),
-                    parents, progenitors, Box::new(LinVJP(move |x| libaf::pow(x, &(self.1 - 1), false) * self.1)))
-    }
-}
-
-pub struct Sinh<X: Expression<Array>>(X);
-
-impl<X: Expression<Array>> Expression<Array> for Sinh<X> {
-    fn eval(&self, c: &mut Context) -> Node<Array> {
-        let x_eval = self.0.eval(c);
-        let parents = vec![x_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node::new(c, libaf::sinh(parents[0].value()),
-                    parents, progenitors, Box::new(LinVJP(libaf::cosh)))
-    }
-}
-
-pub struct Cosh<X: Expression<Array>>(X);
-
-impl<X: Expression<Array>> Expression<Array> for Cosh<X> {
-    fn eval(&self, c: &mut Context) -> Node<Array> {
-        let x_eval = self.0.eval(c);
-        let parents = vec![x_eval];
-        let progenitors = Node::get_progenitors(&parents);
-
-        Node::new(c, libaf::cosh(parents[0].value()),
-                    parents, progenitors, Box::new(LinVJP(libaf::sinh)))
+                    parents, progenitors, Box::new(LinVJP(move |x| libaf::pow(x, &(self.1 - 1f64), false) * self.1)))
     }
 }

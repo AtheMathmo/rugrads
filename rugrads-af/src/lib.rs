@@ -24,7 +24,7 @@ impl Into<libaf::Dim4> for Dim2 {
 }
 
 /// Creates a new 2d Array
-pub fn new_array<T: libaf::HasAfEnum>(slice: &[T], dims: Dim2) -> Array {
+pub fn new_array(slice: &[f64], dims: Dim2) -> Array {
     Array::new(slice, dims.into())
 }
 
@@ -39,15 +39,11 @@ impl<E: Expression<Array>> Gradient<E> {
         let output_elms = output_dims.elements() as usize;
 
         match output_type {
-            DType::F32 => {
-                let ones = vec![1f32; output_elms];
-                self.0.backprop(wrt, Array::new(&ones, output_dims))
-            },
             DType::F64 => {
                 let ones = vec![1f64; output_elms];
                 self.0.backprop(wrt, Array::new(&ones, output_dims))
             },
-            _ => panic!("Currently only float array types are supported")
+            _ => panic!("Currently only f64 array types are supported")
         }
     }
 }
