@@ -60,3 +60,13 @@ pub fn mul<E1, E2>(lhs: Container<E1>, rhs: Container<E2>, _: bool) -> Container
 {
     Container::new(AFMul(lhs.into_inner(), rhs.into_inner()))
 }
+
+/// Computes the matrix product of two arrays
+///
+/// Currently this function only supports Matrix-Vector products
+/// when the derivative is taken with respect to the vector.
+pub fn matmul<E1, E2>(lhs: Container<E1>, rhs: Container<E2>, _: ::MatProp, _: ::MatProp) -> Container<MatMul<E1, E2>>
+    where E1: Expression<Array>, E2: Expression<Array>
+{
+    Container::new(MatMul(lhs.into_inner(), rhs.into_inner()))
+}

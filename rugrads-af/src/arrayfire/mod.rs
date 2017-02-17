@@ -157,11 +157,7 @@ impl VecJacProduct<Array> for DotVJP {
             (1, 1, 1) => {
                 libaf::mul(&g, &self.0, false)
             },
-            // RHS Matrix-Vector dot derivative
-            (1, 2, 1) => {
-                libaf::mul(&g, &self.0, false)
-            },
-            _ => panic!("dot product does not (yet) support matrix differentation")
+            _ => panic!("Dot product only supports vectors (currently)")
         }
     }
 }
@@ -179,7 +175,7 @@ impl<X, Y> Expression<Array> for Dot<X, Y>
 
         let dot = libaf::dot(parents[0].value(), parents[1].value(),
                               libaf::MatProp::NONE, libaf::MatProp::NONE);
-        
+
         let lhs_clone = parents[0].value().clone();
         let rhs_clone = parents[1].value().clone();
         Node::new(c, dot, parents, progenitors, Box::new(DotVJP(lhs_clone, rhs_clone)))
@@ -209,11 +205,48 @@ impl<X, Y> Expression<Array> for AFMul<X, Y>
         let parents = vec![x_eval, y_eval];
         let progenitors = Node::get_progenitors(&parents);
 
-        let dot = libaf::mul(parents[0].value(), parents[1].value(), false);
+        let prod = libaf::mul(parents[0].value(), parents[1].value(), false);
         
         let lhs_clone = parents[0].value().clone();
         let rhs_clone = parents[1].value().clone();
-        Node::new(c, dot, parents, progenitors, Box::new(AFMulVJP(lhs_clone, rhs_clone)))
+        Node::new(c, prod, parents, progenitors, Box::new(AFMulVJP(lhs_clone, rhs_clone)))
+    }
+}
+
+pub struct MatMulVJP(Array, Array);
+
+impl VecJacProduct<Array> for MatMulVJP {
+    fn vjp(&self, g: Array, _: &Node<Array>, argnum: usize) -> Array {
+        let lhs_dim = self.0.dims().ndims();
+        let rhs_dim = self.1.dims().ndims();
+
+        match (argnum, lhs_dim, rhs_dim) {
+            // RHS Vector derivative
+            (1, 2, 1) => {
+                g * &self.0
+            },
+            _ => panic!("Currently only Matrix-Vector matmul is supported \
+                            with vector derivative."),
+        }
+    }
+}
+
+pub struct MatMul<X: Expression<Array>, Y: Expression<Array>>(X, Y);
+
+impl<X, Y> Expression<Array> for MatMul<X, Y>
+    where X: Expression<Array>, Y: Expression<Array>
+{
+    fn eval(&self, c: &mut Context) -> Node<Array> {
+        let x_eval = self.0.eval(c);
+        let y_eval = self.1.eval(c);
+        let parents = vec![x_eval, y_eval];
+        let progenitors = Node::get_progenitors(&parents);
+
+        let mat_prod = libaf::matmul(parents[0].value(), parents[1].value(), ::MatProp::NONE, ::MatProp::NONE);
+        
+        let lhs_clone = parents[0].value().clone();
+        let rhs_clone = parents[1].value().clone();
+        Node::new(c, mat_prod, parents, progenitors, Box::new(MatMulVJP(lhs_clone, rhs_clone)))
     }
 }
 

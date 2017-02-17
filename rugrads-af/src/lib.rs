@@ -47,8 +47,8 @@ impl<E: Expression<Array>> Gradient<E> {
 
         match output_type {
             DType::F64 => {
-                let ones = vec![1f64; output_elms];
-                self.0.backprop(wrt, Array::new(&ones, output_dims))
+                let ones = vec![1f64; 4];
+                self.0.backprop(wrt, Array::new(&ones, Dim4::new(&[4,1,1,1])))
             },
             _ => panic!("Currently only f64 array types are supported")
         }
