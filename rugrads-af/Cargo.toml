@@ -4,5 +4,5 @@ version = "0.0.1"
 authors = ["james <LucasJ94@hotmail.co.uk>"]
 
 [dependencies]
-arrayfire = "3.4.1"
+arrayfire = {version = "3.4.1"}
 rugrads = {version = "0.0.1", path = ".." }

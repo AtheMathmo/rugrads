@@ -3,13 +3,20 @@ extern crate arrayfire as libaf;
 
 mod arrayfire;
 
-use libaf::{Array, DType};
+#[cfg(test)]
+pub mod testsupport;
+
+use libaf::DType;
 use rugrads::Expression;
 
 // Reexport specialized rugrad types
 pub type Container<E> = rugrads::Container<Array, E>;
 pub type Context = rugrads::Context<Array>;
-pub struct Gradient<E: Expression<Array>>(rugrads::Gradient<Array, E>);
+pub struct Gradient<E: Expression<Array>>(pub rugrads::Gradient<Array, E>);
+
+// Reexport some needed libaf api components
+pub use libaf::{Array, Backend, NormType, MatProp, Dim4};
+pub use libaf::{set_backend, constant};
 
 // Reexport all arrayfire wrapper functions
 pub use arrayfire::wrappers::*;

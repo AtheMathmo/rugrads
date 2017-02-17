@@ -150,6 +150,11 @@ impl<T: Clone + Add<Output=T>, E: Expression<T>> Gradient<T, E> {
 
         return cur_in_grad
     }
+
+    /// Returns a mutable reference to a variable value in this gradient
+    pub fn get_mut(&mut self, var: Container<T, Variable>) -> &mut T {
+        &mut self.context.vars[var.inner.0]
+    }
 }
 
 impl<T: num::Float, E: Expression<T>> Gradient<T, E> {
@@ -296,6 +301,11 @@ impl<'a, T> Node<'a, T> {
     /// Returns a reference to the underlying node value.
     pub fn value(&self) -> &T {
         &self.value
+    }
+
+    /// Returns a reference to the nodes parents
+    pub fn parents(&self) -> &Vec<Node<T>> {
+        &self.parents
     }
 }
 
