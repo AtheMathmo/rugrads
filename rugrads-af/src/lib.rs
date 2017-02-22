@@ -41,14 +41,11 @@ impl<E: Expression<Array>> Gradient<E> {
     }
 
     pub fn grad(&mut self, wrt: Container<rugrads::Variable>) -> Array {
-        let output_dims = wrt.inner().value(&self.0.context()).dims();
-        let output_type = wrt.inner().value(&self.0.context()).get_type();
-        let output_elms = output_dims.elements() as usize;
+        let input_type = wrt.inner().value(&self.0.context()).get_type();
 
-        match output_type {
+        match input_type {
             DType::F64 => {
-                let ones = vec![1f64; 4];
-                self.0.backprop(wrt, Array::new(&ones, Dim4::new(&[4,1,1,1])))
+                self.0.backprop(wrt, libaf::constant(1f64, Dim4::new(&[1,1,1,1])))
             },
             _ => panic!("Currently only f64 array types are supported")
         }

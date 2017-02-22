@@ -1,7 +1,6 @@
 //! This is a super-ugly proof of concept for optimizing auto differentiation
-//!
-//! TODO: Currently this example panics as there is a bug in the VJP computation somewhere.
 
+extern crate arrayfire as af;
 extern crate rugrads_af as raf;
 use raf::{Array, Dim4};
 
@@ -34,7 +33,7 @@ fn main() {
     let ones = context.create_variable(raf::constant(1f64, Dim4::new(&[4, 1, 1, 1])));
 
     // Set up our logistic regression loss function
-    let preds = raf::sigmoid(raf::dot(x, w.clone(), raf::MatProp::NONE, raf::MatProp::NONE));
+    let preds = raf::sigmoid(raf::matmul(x.clone(), w.clone(), raf::MatProp::NONE, raf::MatProp::NONE));
     let label_probs = raf::mul(preds, y.clone() + y.clone() - ones.clone(), false) + ones - y;
     let loss = -raf::sum_all(raf::log(label_probs));
 
@@ -42,11 +41,16 @@ fn main() {
     let mut g = raf::Gradient::of(loss, context);
 
     // Optimize the weights
-    let alpha = raf::constant(0.01, Dim4::new(&[3, 1, 1, 1]));
+    let alpha = raf::constant(0.1, Dim4::new(&[1, 1, 1, 1]));
 
-    for _ in 0..100 {
+    for _ in 0..300 {
         let w_grad = g.grad(w.clone());
-        *g.0.get_mut(w.clone()) -= w_grad * &alpha;
+        let updated = g.0.get(w.clone()) - w_grad * &alpha;
+        *g.0.get_mut(w.clone()) = updated;
     }
+
+    // Print the predicted outputs on the training data
+    let train_targets = af::matmul(g.0.get(x), g.0.get(w), af::MatProp::NONE, af::MatProp::NONE);
+    af::print(&af::sigmoid(&train_targets));
     */
 }

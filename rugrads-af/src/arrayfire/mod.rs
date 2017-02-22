@@ -14,7 +14,7 @@ impl<F> VecJacProduct<Array> for LinVJP<F>
     where for<'a> F: Fn(&'a Array) -> Array
 {
     fn vjp(&self, g: Array, x: &Node<Array>, _: usize) -> Array {
-        g * (self.0)(x.value())
+        libaf::mul(&g, &(self.0)(x.value()), false)
     }
 }
 
@@ -92,6 +92,7 @@ pub struct SumAllVJP;
 impl VecJacProduct<Array> for SumAllVJP {
     fn vjp(&self, g: Array, x: &Node<Array>, _: usize) -> Array {
         let output_dims = x.value().dims();
+        debug_assert!(g.is_scalar());
         libaf::tile(&g, output_dims)
     }
 }
@@ -115,11 +116,9 @@ pub struct NormVJP(libaf::NormType);
 
 impl VecJacProduct<Array> for NormVJP {
     fn vjp(&self, g: Array, x: &Node<Array>, _: usize) -> Array {
-        let output_dims = x.value().dims();
-        let full_g = libaf::tile(&g, output_dims);
         match self.0 {
             libaf::NormType::VECTOR_2 => {
-                libaf::mul(&full_g, x.value(), false) * 2
+                libaf::mul(&g, x.value(), true) * 2
             },
             _ => panic!("Only Frobenius norm is supported currently")
         }
@@ -174,7 +173,7 @@ impl<X, Y> Expression<Array> for Dot<X, Y>
         let progenitors = Node::get_progenitors(&parents);
 
         let dot = libaf::dot(parents[0].value(), parents[1].value(),
-                              libaf::MatProp::NONE, libaf::MatProp::NONE);
+                              ::MatProp::NONE, ::MatProp::NONE);
 
         let lhs_clone = parents[0].value().clone();
         let rhs_clone = parents[1].value().clone();
@@ -223,10 +222,9 @@ impl VecJacProduct<Array> for MatMulVJP {
         match (argnum, lhs_dim, rhs_dim) {
             // RHS Vector derivative
             (1, 2, 1) => {
-                g * &self.0
+                libaf::matmul(&self.0, &g, ::MatProp::TRANS, ::MatProp::NONE)
             },
-            _ => panic!("Currently only Matrix-Vector matmul is supported \
-                            with vector derivative."),
+            _ => g,
         }
     }
 }

@@ -155,6 +155,11 @@ impl<T: Clone + Add<Output=T>, E: Expression<T>> Gradient<T, E> {
     pub fn get_mut(&mut self, var: Container<T, Variable>) -> &mut T {
         &mut self.context.vars[var.inner.0]
     }
+
+    /// Returns a mutable reference to a variable value in this gradient
+    pub fn get(&self, var: Container<T, Variable>) -> &T {
+        &self.context.vars[var.inner.0]
+    }
 }
 
 impl<T: num::Float, E: Expression<T>> Gradient<T, E> {
