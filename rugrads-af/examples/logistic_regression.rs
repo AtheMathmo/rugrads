@@ -33,8 +33,8 @@ fn main() {
     let ones = context.create_variable(raf::constant(1f64, Dim4::new(&[4, 1, 1, 1])));
 
     // Set up our logistic regression loss function
-    let preds = raf::sigmoid(raf::matmul(x.clone(), w.clone(), raf::MatProp::NONE, raf::MatProp::NONE));
-    let label_probs = raf::mul(preds, y.clone() + y.clone() - ones.clone(), false) + ones - y;
+    let preds = raf::sigmoid(raf::matmul(x, w, raf::MatProp::NONE, raf::MatProp::NONE));
+    let label_probs = raf::mul(preds, y + y - ones, false) + ones - y;
     let loss = -raf::sum_all(raf::log(label_probs));
 
     // Set up Gradient object to auto diff
@@ -44,9 +44,9 @@ fn main() {
     let alpha = raf::constant(0.1, Dim4::new(&[1, 1, 1, 1]));
 
     for _ in 0..300 {
-        let w_grad = g.grad(w.clone());
-        let updated = g.0.get(w.clone()) - w_grad * &alpha;
-        *g.0.get_mut(w.clone()) = updated;
+        let w_grad = g.grad(w);
+        let updated = g.0.get(w) - w_grad * &alpha;
+        *g.0.get_mut(w) = updated;
     }
 
     // Print the predicted outputs on the training data

@@ -49,11 +49,21 @@ use iter::reverse_topology;
 /// 'Orphan Rules'. By using the container we can
 /// overload arithmetic operations to give a nicer
 /// user experience. 
-#[derive(Clone, Copy)]
 pub struct Container<T, E: Expression<T>> {
     inner: E,
     _marker: PhantomData<T>,
 }
+
+impl<T, E: Clone + Expression<T>> Clone for Container<T, E> {
+    fn clone(&self) -> Self {
+        Container {
+            inner: self.inner.clone(),
+            _marker: PhantomData
+        }
+    }
+}
+
+impl<T, E: Copy + Expression<T>> Copy for Container<T,E> {}
 
 impl<T, E: Expression<T>> Expression<T> for Container<T, E> {
     fn eval(&self, c: &mut Context<T>) -> Node<T> {
