@@ -6,20 +6,24 @@ use libaf::Array;
 use ::Context;
 
 pub mod wrappers;
+pub mod extras;
+mod utils;
 
+#[derive(Copy, Clone)]
 struct LinVJP<F>(F)
     where for<'a> F: Fn(&'a Array) -> Array;
 
 impl<F> VecJacProduct<Array> for LinVJP<F>
     where for<'a> F: Fn(&'a Array) -> Array
 {
-    fn vjp(&self, g: Array, x: &Node<Array>, _: usize) -> Array {
+    fn vjp(&self, g: Array, _: &Node<Array>, x: &Node<Array>, _: usize) -> Array {
         libaf::mul(&g, &(self.0)(x.value()), false)
     }
 }
 
 macro_rules! univariate_wrapper {
     ($name: ident, $af_func: expr, $vjp: expr) => {
+#[derive(Copy, Clone)]
 pub struct $name<X: Expression<Array>>(X);
 
 impl<X: Expression<Array>> Expression<Array> for $name<X> {
@@ -74,6 +78,7 @@ univariate_wrapper!(Sigmoid, libaf::sigmoid, |x| {
     libaf::div(&exp, &denom, false)
 });
 
+#[derive(Copy, Clone)]
 pub struct Pow<X: Expression<Array>>(X, f64);
 
 impl<X: Expression<Array>> Expression<Array> for Pow<X> {
@@ -87,16 +92,17 @@ impl<X: Expression<Array>> Expression<Array> for Pow<X> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct SumAllVJP;
 
 impl VecJacProduct<Array> for SumAllVJP {
-    fn vjp(&self, g: Array, x: &Node<Array>, _: usize) -> Array {
+    fn vjp(&self, g: Array, _: &Node<Array>, x: &Node<Array>, _: usize) -> Array {
         let output_dims = x.value().dims();
-        debug_assert!(g.is_scalar());
-        libaf::tile(&g, output_dims)
+        utils::repeat_to_match_dims(&g, output_dims)
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct SumAll<X: Expression<Array>>(X);
 
 impl<X: Expression<Array>> Expression<Array> for SumAll<X> {
@@ -112,10 +118,11 @@ impl<X: Expression<Array>> Expression<Array> for SumAll<X> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct NormVJP(libaf::NormType);
 
 impl VecJacProduct<Array> for NormVJP {
-    fn vjp(&self, g: Array, x: &Node<Array>, _: usize) -> Array {
+    fn vjp(&self, g: Array, _: &Node<Array>, x: &Node<Array>, _: usize) -> Array {
         match self.0 {
             libaf::NormType::VECTOR_2 => {
                 libaf::mul(&g, x.value(), true) * 2
@@ -125,6 +132,7 @@ impl VecJacProduct<Array> for NormVJP {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Norm<X: Expression<Array>>(X, libaf::NormType, f64, f64);
 
 impl<X: Expression<Array>> Expression<Array> for Norm<X> {
@@ -140,10 +148,11 @@ impl<X: Expression<Array>> Expression<Array> for Norm<X> {
     }
 }
 
+#[derive(Clone)]
 pub struct DotVJP(Array, Array);
 
 impl VecJacProduct<Array> for DotVJP {
-    fn vjp(&self, g: Array, _: &Node<Array>, argnum: usize) -> Array {
+    fn vjp(&self, g: Array, _: &Node<Array>, _: &Node<Array>, argnum: usize) -> Array {
         let lhs_dim = self.0.dims().ndims();
         let rhs_dim = self.1.dims().ndims();
 
@@ -161,6 +170,7 @@ impl VecJacProduct<Array> for DotVJP {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Dot<X: Expression<Array>, Y: Expression<Array>>(X, Y);
 
 impl<X, Y> Expression<Array> for Dot<X, Y>
@@ -181,10 +191,11 @@ impl<X, Y> Expression<Array> for Dot<X, Y>
     }
 }
 
+#[derive(Clone)]
 pub struct AFMulVJP(Array, Array);
 
 impl VecJacProduct<Array> for AFMulVJP {
-    fn vjp(&self, g: Array, _: &Node<Array>, argnum: usize) -> Array {
+    fn vjp(&self, g: Array, _: &Node<Array>, _: &Node<Array>, argnum: usize) -> Array {
         match argnum {
             0 => libaf::mul(&g, &self.1, false),
             1 => libaf::mul(&g, &self.0, false),
@@ -193,6 +204,7 @@ impl VecJacProduct<Array> for AFMulVJP {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct AFMul<X: Expression<Array>, Y: Expression<Array>>(X, Y);
 
 impl<X, Y> Expression<Array> for AFMul<X, Y>
@@ -212,10 +224,11 @@ impl<X, Y> Expression<Array> for AFMul<X, Y>
     }
 }
 
+#[derive(Clone)]
 pub struct MatMulVJP(Array, Array);
 
 impl VecJacProduct<Array> for MatMulVJP {
-    fn vjp(&self, g: Array, _: &Node<Array>, argnum: usize) -> Array {
+    fn vjp(&self, g: Array, _: &Node<Array>, _: &Node<Array>, argnum: usize) -> Array {
         let lhs_dim = self.0.dims().ndims();
         let rhs_dim = self.1.dims().ndims();
 
@@ -224,11 +237,18 @@ impl VecJacProduct<Array> for MatMulVJP {
             (1, 2, 1) => {
                 libaf::matmul(&self.0, &g, ::MatProp::TRANS, ::MatProp::NONE)
             },
+            (0, 2, 2) => { 
+                libaf::matmul(&g, &self.1, ::MatProp::NONE, ::MatProp::TRANS)
+            },
+            (1, 2, 2) => {
+                libaf::matmul(&self.0, &g, ::MatProp::TRANS, ::MatProp::NONE)
+            }
             _ => g,
         }
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct MatMul<X: Expression<Array>, Y: Expression<Array>>(X, Y);
 
 impl<X, Y> Expression<Array> for MatMul<X, Y>
@@ -252,7 +272,6 @@ impl<X, Y> Expression<Array> for MatMul<X, Y>
 mod tests {
     use libaf;
     use libaf::{Array, Dim4};
-    use rugrads::VecJacProduct;
 
     use ::testsupport::*;
     use ::Context;
@@ -285,4 +304,39 @@ fn $test_name() {
     test_univar_func!(test_cos, Cos, libaf::cos, |x| -libaf::sin(x));
     test_univar_func!(test_sinh, Sinh, libaf::sinh, libaf::cosh);
     test_univar_func!(test_cosh, Cosh, libaf::cosh, libaf::sinh);
+
+    #[test]
+    fn test_matmul_2_2() {
+        libaf::set_backend(libaf::Backend::CPU);
+        let dims = Dim4::new(&[2,2,1,1]);
+        let arr = Array::new(&[0.5, 0.5, 0.25, 0.25], dims.clone());
+        let arr2 = Array::new(&[0.25, 0.25, 0.5, 0.5], dims);
+        let var = TestVar(arr.clone());
+        let var2 = TestVar(arr2.clone());
+        let expr = MatMul(var, var2);
+
+        let mut c = Context::new();
+        let node = expr.eval(&mut c);
+
+        let p = &node.parents()[0];
+        let ones = libaf::constant(1f64, dims);
+        let _ = node.vjp(ones, &p, 0);
+    }
+
+    #[test]
+    fn test_matmul_2_3_3_2() {
+        libaf::set_backend(libaf::Backend::CPU);
+        let dims = Dim4::new(&[2,2,1,1]);
+        let arr = Array::new(&[0.5, 0.5, 0.5, 0.25, 0.25, 0.25], dims.clone());
+        let var = TestVar(arr.clone());
+        let var2 = TestVar(libaf::transpose(&arr, false));
+        let expr = MatMul(var, var2);
+
+        let mut c = Context::new();
+        let node = expr.eval(&mut c);
+
+        let p = &node.parents()[0];
+        let ones = libaf::constant(1f64, dims);
+        let _ = node.vjp(ones, &p, 0);
+    }
 }

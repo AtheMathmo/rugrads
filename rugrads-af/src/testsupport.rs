@@ -15,7 +15,7 @@ pub fn array_eq(arr1: &Array, arr2: &Array, summed_diff: f64) -> bool {
 pub struct IdentityVJP;
 
 impl VecJacProduct<Array> for IdentityVJP {
-    fn vjp(&self, g: Array, _: &Node<Array>, _: usize) -> Array {
+    fn vjp(&self, g: Array, _: &Node<Array>, _: &Node<Array>, _: usize) -> Array {
         g
     }
 }

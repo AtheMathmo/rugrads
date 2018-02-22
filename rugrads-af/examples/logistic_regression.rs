@@ -18,8 +18,6 @@ fn toy_dataset() -> (Array, Array) {
 }
 
 fn main() {
-    /* Need current arrayfire-rust dev branch for this to compile
-
     // Set the backend and create context for auto diff
     raf::set_backend(raf::Backend::CPU);
     let mut context = raf::Context::new();
@@ -52,5 +50,4 @@ fn main() {
     // Print the predicted outputs on the training data
     let train_targets = af::matmul(g.0.get(x), g.0.get(w), af::MatProp::NONE, af::MatProp::NONE);
     af::print(&af::sigmoid(&train_targets));
-    */
 }

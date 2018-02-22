@@ -20,6 +20,7 @@ pub use libaf::{set_backend, constant};
 
 // Reexport all arrayfire wrapper functions
 pub use arrayfire::wrappers::*;
+pub use arrayfire::extras::{logsumexp, logsoftmax};
 
 /// A struct for two dimensions
 pub struct Dim2(pub [u64; 2]);
