@@ -189,7 +189,7 @@ pub trait Expression<T> {
 /// The Vector-Jacobian product of gradients
 pub trait VecJacProduct<T> {
     /// The vjp function which determines how the gradient is back propagated
-    fn vjp(&self, g: T, node: &Node<T>, argnum: usize) -> T;
+    fn vjp(&self, g: T, node: &Node<T>, parent: &Node<T>, argnum: usize) -> T;
 }
 
 /// The context for a computational expression
@@ -280,13 +280,13 @@ pub struct Node<'a, T> {
     _vjp: Box<VecJacProduct<T> + 'a>,
 }
 
-impl<'a, T> VecJacProduct<T> for Node<'a, T> {
-    fn vjp(&self, g: T, node: &Node<T>, argnum: usize) -> T {
-        self._vjp.vjp(g, node, argnum)
-    }
-}
 
 impl<'a, T> Node<'a, T> {
+    /// Vector-Jacobian Product wrapper function
+    pub fn vjp(&self, g: T, parent: &Node<T>, argnum: usize) -> T {
+        self._vjp.vjp(g, &self, parent, argnum)
+    }
+
     /// Returns a new node in the given context
     pub fn new(c: &mut Context<T>, value: T,
                 parents: Vec<Node<'a, T>>, progenitors: Vec<usize>,
@@ -341,7 +341,7 @@ impl Variable {
 struct IdentityVJP;
 
 impl<T> VecJacProduct<T> for IdentityVJP {
-    fn vjp(&self, g: T, _: &Node<T>, _: usize) -> T {
+    fn vjp(&self, g: T, _:&Node<T>, _: &Node<T>, _: usize) -> T {
         g
     }
 }

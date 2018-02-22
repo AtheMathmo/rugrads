@@ -20,7 +20,7 @@ impl<T: Float, F: Fn(T) -> T> LinVJP<T, F> {
 }
 
 impl<T: Float, F: Fn(T) -> T> VecJacProduct<T> for LinVJP<T, F> {
-    fn vjp(&self, g: T, x: &Node<T>, _: usize) -> T {
+    fn vjp(&self, g: T, _:&Node<T>, x: &Node<T>, _: usize) -> T {
         g * (self.f)(x.value)
     }
 }
@@ -221,7 +221,7 @@ mod tests {
     use super::*;
     use ::functions::{Add, Mul};
     use ::{Node, Context};
-    use ::{Expression, IdentityVJP, VecJacProduct};
+    use ::{Expression, IdentityVJP};
 
     pub struct TestVar(f64);
 

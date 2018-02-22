@@ -15,6 +15,7 @@ mod float;
 pub use self::float::{sin, cos, exp, ln, powf};
 
 /// Addition operation
+#[derive(Copy, Clone)]
 pub struct Add<T, X, Y>
     where for<'a, 'b> &'a T: ops::Add<&'b T, Output=T>,
             X: Expression<T>,
@@ -62,6 +63,7 @@ impl<T, X, Y> Expression<T> for Add<T, X, Y>
 }
 
 /// Multiplication operation
+#[derive(Copy, Clone)]
 pub struct Mul<T, X, Y>
     where T: Float,
             X: Expression<T>,
@@ -72,13 +74,14 @@ pub struct Mul<T, X, Y>
     _marker: PhantomData<T>,
 }
 
+#[derive(Copy, Clone)]
 struct MulVJP<T>(T, T)
     where T: Float;
 
 impl<T> VecJacProduct<T> for MulVJP<T>
     where T: Float
 {
-    fn vjp(&self, g: T, _: &Node<T>, argnum: usize) -> T {
+    fn vjp(&self, g: T, _: &Node<T>, _: &Node<T>, argnum: usize) -> T {
         match argnum {
             0 => g * self.1,
             1 => g * self.0,
@@ -127,6 +130,7 @@ impl<T, X, Y> Expression<T> for Mul<T, X, Y>
 }
 
 /// Division operation
+#[derive(Copy, Clone)]
 pub struct Div<T, X, Y>
     where T: Float,
             X: Expression<T>,
@@ -151,10 +155,11 @@ impl<T, X, Y> Div<T, X, Y>
     }
 }
 
+#[derive(Copy, Clone)]
 struct DivVJP<T: Float>(T, T);
 
 impl<T: Float> VecJacProduct<T> for DivVJP<T> {
-    fn vjp(&self, g: T, _: &Node<T>, argnum: usize) -> T {
+    fn vjp(&self, g: T, _: &Node<T>, _: &Node<T>, argnum: usize) -> T {
         match argnum {
             0 => g / self.1,
             1 => - g * self.0 / (self.1 * self.1),
@@ -186,6 +191,7 @@ impl<T, X, Y> Expression<T> for Div<T, X, Y>
 }
 
 /// Subtraction operation
+#[derive(Copy, Clone)]
 pub struct Sub<T, X, Y>
     where for<'a, 'b> &'a T: ops::Sub<&'b T, Output=T>,
             T: ops::Neg<Output=T>,
@@ -235,10 +241,11 @@ impl<T, X, Y> Expression<T> for Sub<T, X, Y>
     }
 }
 
+#[derive(Copy, Clone)]
 struct SubVJP<T: ops::Neg<Output=T>>(PhantomData<T>);
 
 impl<T: ops::Neg<Output=T>> VecJacProduct<T> for SubVJP<T> {
-    fn vjp(&self, g: T, _: &Node<T>, argnum: usize) -> T {
+    fn vjp(&self, g: T, _: &Node<T>, _: &Node<T>, argnum: usize) -> T {
         match argnum {
             0 => g,
             1 => -g,
@@ -249,14 +256,16 @@ impl<T: ops::Neg<Output=T>> VecJacProduct<T> for SubVJP<T> {
 
 
 /// Negative unary operator
+#[derive(Copy, Clone)]
 pub struct Neg<T, X>(X, PhantomData<T>)
     where T: Clone + ops::Neg<Output=T>,
           X: Expression<T>;
 
+#[derive(Copy, Clone)]
 struct NegVJP<T: ops::Neg<Output=T>>(PhantomData<T>);
 
 impl<T: ops::Neg<Output=T>> VecJacProduct<T> for NegVJP<T> {
-    fn vjp(&self, g: T, _: &Node<T>, _: usize) -> T {
+    fn vjp(&self, g: T, _: &Node<T>, _: &Node<T>, _: usize) -> T {
         -g
     }
 }
