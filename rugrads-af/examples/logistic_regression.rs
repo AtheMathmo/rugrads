@@ -17,6 +17,10 @@ fn toy_dataset() -> (Array, Array) {
     (inputs, targets)
 }
 
+// fn pred_acc(preds: &Array, targets: &Array) -> (f64, f64) {
+//     af::mean_all(&af::eq(&preds, &targets, false))
+// }
+
 fn main() {
     // Set the backend and create context for auto diff
     raf::set_backend(raf::Backend::CPU);
@@ -42,12 +46,12 @@ fn main() {
     let alpha = raf::constant(0.1, Dim4::new(&[1, 1, 1, 1]));
 
     for _ in 0..300 {
-        let w_grad = g.grad(w);
-        let updated = g.0.get(w) - w_grad * &alpha;
-        *g.0.get_mut(w) = updated;
+        let w_grad = g.grad(&w);
+        let updated = g.0.get(&w) - w_grad * &alpha;
+        *g.0.get_mut(&w) = updated;
     }
 
     // Print the predicted outputs on the training data
-    let train_targets = af::matmul(g.0.get(x), g.0.get(w), af::MatProp::NONE, af::MatProp::NONE);
+    let train_targets = af::matmul(g.0.get(&x), g.0.get(&w), af::MatProp::NONE, af::MatProp::NONE);
     af::print(&af::sigmoid(&train_targets));
 }

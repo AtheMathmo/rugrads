@@ -13,7 +13,7 @@ fn test_sin_cos() {
     let f = sin(cos(x.clone()));
 
     let mut g = Gradient::of(f, context);
-    g.grad(x);    
+    g.grad(&x);    
 }
 
 #[test]
@@ -26,6 +26,6 @@ fn test_sum_all() {
     let f = sum_all(x.clone());
 
     let mut g = Gradient::of(f, context);
-    g.grad(x);
+    g.grad(&x);
 }
 

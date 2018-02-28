@@ -237,13 +237,21 @@ impl VecJacProduct<Array> for MatMulVJP {
             (1, 2, 1) => {
                 libaf::matmul(&self.0, &g, ::MatProp::TRANS, ::MatProp::NONE)
             },
-            (0, 2, 2) => { 
-                libaf::matmul(&g, &self.1, ::MatProp::NONE, ::MatProp::TRANS)
+            (0, 2, 2) => {
+                if g.dims().ndims() == 1 {
+                    g * &self.1
+                } else {
+                    libaf::matmul(&g, &self.1, ::MatProp::NONE, ::MatProp::TRANS)
+                }
             },
             (1, 2, 2) => {
-                libaf::matmul(&self.0, &g, ::MatProp::TRANS, ::MatProp::NONE)
+                if g.dims().ndims() == 1 {
+                    g * &self.0
+                } else {
+                    libaf::matmul(&self.0, &g, ::MatProp::TRANS, ::MatProp::NONE)
+                }
             }
-            _ => g,
+            _ => panic!("Invalid arguments fed to MatMulVJP"),
         }
     }
 }
@@ -268,15 +276,51 @@ impl<X, Y> Expression<Array> for MatMul<X, Y>
     }
 }
 
+
+#[derive(Clone)]
+pub struct MaxOfVJP(Array, Array, bool);
+
+impl VecJacProduct<Array> for MaxOfVJP {
+    fn vjp(&self, g: Array, ans: &Node<Array>, _: &Node<Array>, argnum: usize) -> Array {
+        match argnum {
+            0 => g * utils::balanced_eq(&self.0, ans.value(), &self.1, self.2),
+            1 => g * utils::balanced_eq(&self.1, ans.value(), &self.0, self.2),
+            _ => panic!("Invalid argnum given to MaxOfVJP")
+        }
+        
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct MaxOf<X: Expression<Array>, Y: Expression<Array>>(X, Y, bool);
+
+impl<X,Y> Expression<Array> for MaxOf<X,Y>
+    where X: Expression<Array>, Y: Expression<Array>
+{
+    fn eval(&self, c: &mut Context) -> Node<Array> {
+        let x_eval = self.0.eval(c);
+        let y_eval = self.1.eval(c);
+        
+        let out_val = libaf::maxof(x_eval.value(), y_eval.value(), self.2);
+
+        let parents = vec![x_eval, y_eval];
+        let progenitors = Node::get_progenitors(&parents);
+        let lhs_clone = parents[0].value().clone();
+        let rhs_clone = parents[1].value().clone();
+        Node::new(c, out_val, parents, progenitors, Box::new(MaxOfVJP(lhs_clone, rhs_clone, self.2)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use libaf;
     use libaf::{Array, Dim4};
 
     use ::testsupport::*;
-    use ::Context;
+    use ::{Context};
 
     use super::*;
+    use rugrads::LeafVar;
 
     macro_rules! test_univar_func {
         ($test_name: ident, $expr: ident, $func: expr, $grad: expr) => {
@@ -285,7 +329,7 @@ fn $test_name() {
     libaf::set_backend(libaf::Backend::CPU);
     let dims = Dim4::new(&[2,2,1,1]);
     let arr = Array::new(&[0.5, 0.5, 0.25, 0.25], dims);
-    let var = TestVar(arr.clone());
+    let var = LeafVar(arr.clone());
     let expr = $expr(var);
 
     let mut c = Context::new();
@@ -311,8 +355,8 @@ fn $test_name() {
         let dims = Dim4::new(&[2,2,1,1]);
         let arr = Array::new(&[0.5, 0.5, 0.25, 0.25], dims.clone());
         let arr2 = Array::new(&[0.25, 0.25, 0.5, 0.5], dims);
-        let var = TestVar(arr.clone());
-        let var2 = TestVar(arr2.clone());
+        let var = LeafVar(arr.clone());
+        let var2 = LeafVar(arr2.clone());
         let expr = MatMul(var, var2);
 
         let mut c = Context::new();
@@ -324,12 +368,29 @@ fn $test_name() {
     }
 
     #[test]
-    fn test_matmul_2_3_3_2() {
+    fn test_matmul_2_3_3_2_first_arg() {
         libaf::set_backend(libaf::Backend::CPU);
-        let dims = Dim4::new(&[2,2,1,1]);
+        let dims = Dim4::new(&[2,3,1,1]);
         let arr = Array::new(&[0.5, 0.5, 0.5, 0.25, 0.25, 0.25], dims.clone());
-        let var = TestVar(arr.clone());
-        let var2 = TestVar(libaf::transpose(&arr, false));
+        let var = LeafVar(arr.clone());
+        let var2 = LeafVar(libaf::transpose(&arr, false));
+        let expr = MatMul(var, var2);
+
+        let mut c = Context::new();
+        let node = expr.eval(&mut c);
+
+        let p = &node.parents()[1];
+        let ones = libaf::constant(1f64, Dim4::new(&[3,2,1,1]));
+        let _ = node.vjp(ones, &p, 0);
+    }
+
+    #[test]
+    fn test_matmul_2_3_3_2_second_arg() {
+        libaf::set_backend(libaf::Backend::CPU);
+        let dims = Dim4::new(&[2,3,1,1]);
+        let arr = Array::new(&[0.5, 0.5, 0.5, 0.25, 0.25, 0.25], dims.clone());
+        let var = LeafVar(arr.clone());
+        let var2 = LeafVar(libaf::transpose(&arr, false));
         let expr = MatMul(var, var2);
 
         let mut c = Context::new();
@@ -337,6 +398,6 @@ fn $test_name() {
 
         let p = &node.parents()[0];
         let ones = libaf::constant(1f64, dims);
-        let _ = node.vjp(ones, &p, 0);
+        let _ = node.vjp(ones, &p, 1);
     }
 }

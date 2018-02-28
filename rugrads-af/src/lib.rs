@@ -3,6 +3,7 @@ extern crate arrayfire as libaf;
 
 mod arrayfire;
 
+
 #[cfg(test)]
 pub mod testsupport;
 
@@ -20,7 +21,7 @@ pub use libaf::{set_backend, constant};
 
 // Reexport all arrayfire wrapper functions
 pub use arrayfire::wrappers::*;
-pub use arrayfire::extras::{logsumexp, logsoftmax};
+pub use arrayfire::extras::{logsumexp, logsoftmax, relu};
 
 /// A struct for two dimensions
 pub struct Dim2(pub [u64; 2]);
@@ -32,7 +33,7 @@ impl Into<libaf::Dim4> for Dim2 {
 }
 
 /// Creates a new 2d Array
-pub fn new_array(slice: &[f64], dims: Dim2) -> Array {
+pub fn new_array<D: Into<libaf::Dim4>>(slice: &[f64], dims: D) -> Array {
     Array::new(slice, dims.into())
 }
 
@@ -41,8 +42,8 @@ impl<E: Expression<Array>> Gradient<E> {
         Gradient(rugrads::Gradient::of(expr, context))
     }
 
-    pub fn grad(&mut self, wrt: Container<rugrads::Variable>) -> Array {
-        let input_type = wrt.inner().value(&self.0.context()).get_type();
+    pub fn grad(&mut self, wrt: &rugrads::Variable) -> Array {
+        let input_type = wrt.value(&self.0.context()).get_type();
 
         match input_type {
             DType::F64 => {

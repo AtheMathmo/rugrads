@@ -3,29 +3,45 @@
 use libaf;
 use libaf::Array;
 
-use rugrads::{Expression, Node, VecJacProduct};
+use rugrads::{Expression, Variable, Container};
 
-use ::Context;
+// pub use rugrads::testsupport::finite_diff_grad;
 
+use ::{Context, Gradient};
+
+/// Estimate the gradient using finite differences
+pub fn finite_diff_grad<E>(expr: &Container<Array,E>, c: &mut Context, var: &Variable, h: Array) -> Array
+    where E: Expression<Array>
+{
+    let curr_val = c.get_variable_value(var);
+    let plus_val = &curr_val + h.clone() / 2.0;
+    let minus_val = curr_val - h.clone() / 2.0;
+
+    c.set_variable_value(var, plus_val);
+    let plus_eval = expr.eval(c).value().clone();
+    c.set_variable_value(var, minus_val);
+    let minus_eval = expr.eval(c).value().clone();
+
+    return (plus_eval - minus_eval) / h
+
+}
+
+/// Compare the autodiff gradient to the finite diff gradient
+pub fn compare_grads<E>(expr: Container<Array,E>, mut c: Context, var: &Variable, h: Array) -> (Array, Array)
+    where E: Expression<Array>
+{
+    let fin_diff_grad = finite_diff_grad(&expr, &mut c, var, h);
+
+    let mut g = Gradient::of(expr, c);
+    let auto_grad = g.grad(var);
+
+    (fin_diff_grad, auto_grad)
+}
+
+// Check array equality up to some tolerance
 pub fn array_eq(arr1: &Array, arr2: &Array, summed_diff: f64) -> bool {
     let arr_abs_diff = libaf::abs(&libaf::sub(arr1, arr2, false));
     libaf::sum_all(&arr_abs_diff).0 <= summed_diff
-}
-
-pub struct IdentityVJP;
-
-impl VecJacProduct<Array> for IdentityVJP {
-    fn vjp(&self, g: Array, _: &Node<Array>, _: &Node<Array>, _: usize) -> Array {
-        g
-    }
-}
-
-pub struct TestVar(pub Array);
-
-impl Expression<Array> for TestVar {
-    fn eval(&self, c: &mut Context) -> Node<Array> {
-        Node::new(c, self.0.clone(), vec![], vec![], Box::new(IdentityVJP))
-    }
 }
 
 mod tests {

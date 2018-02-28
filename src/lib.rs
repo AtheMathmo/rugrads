@@ -21,12 +21,12 @@
 //! let mut grad = Gradient::of(f, context);
 //!
 //! // Take gradient with respect to x - has value: 
-//! grad.grad(x);
-//! grad.grad(y);
+//! grad.grad(&x);
+//! grad.grad(&y);
 //!
 //! // We can also change the initial seed values and recompute:
-//! grad.context().set_variable_value(x, 0.8);
-//! grad.grad(x);
+//! grad.context().set_variable_value(&x, 0.8);
+//! grad.grad(&x);
 //! ``` 
 
 #![deny(missing_docs)]
@@ -37,9 +37,13 @@ pub mod functions;
 mod iter;
 mod utils;
 
+#[cfg(test)]
+pub mod testsupport;
+
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::Add;
+use std::ops::Deref;
 
 use iter::reverse_topology;
 
@@ -60,6 +64,14 @@ impl<T, E: Clone + Expression<T>> Clone for Container<T, E> {
             inner: self.inner.clone(),
             _marker: PhantomData
         }
+    }
+}
+
+impl<T: Clone> Deref for Container<T, Variable> {
+    type Target = Variable;
+
+    fn deref(&self) -> &Variable {
+        &self.inner
     }
 }
 
@@ -133,7 +145,7 @@ impl<T: Clone + Add<Output=T>, E: Expression<T>> Gradient<T, E> {
     /// Back propagates the gradient with some starting seed.
     ///
     /// This seed should always be set to 1. 
-    pub fn backprop(&mut self, wrt: Container<T, Variable>, seed: T) -> T {
+    pub fn backprop(&mut self, wrt: &Variable, seed: T) -> T {
         // Reset the context
         self.context.node_count = 0;
 
@@ -145,7 +157,7 @@ impl<T: Clone + Add<Output=T>, E: Expression<T>> Gradient<T, E> {
         node_in_grads.insert(end.index, vec![seed]);
 
         let mut cur_in_grad = utils::assigning_sum(&node_in_grads[&end.index]);
-        for node in reverse_topology(&end, wrt.inner.0) {
+        for node in reverse_topology(&end, wrt.0) {
             if !node_in_grads.contains_key(&node.index) {
                 // This ensures we don't try to sum an empty in_grads vec
                 continue;
@@ -162,20 +174,20 @@ impl<T: Clone + Add<Output=T>, E: Expression<T>> Gradient<T, E> {
     }
 
     /// Returns a mutable reference to a variable value in this gradient
-    pub fn get_mut(&mut self, var: Container<T, Variable>) -> &mut T {
-        &mut self.context.vars[var.inner.0]
+    pub fn get_mut(&mut self, var: &Variable) -> &mut T {
+        &mut self.context.vars[var.0]
     }
 
     /// Returns a mutable reference to a variable value in this gradient
-    pub fn get(&self, var: Container<T, Variable>) -> &T {
-        &self.context.vars[var.inner.0]
+    pub fn get(&self, var: &Variable) -> &T {
+        &self.context.vars[var.0]
     }
 }
 
 impl<T: num::Float, E: Expression<T>> Gradient<T, E> {
     /// Compute the gradient with respect to the given
     /// `Variable`.
-    pub fn grad(&mut self, wrt: Container<T, Variable>) -> T {
+    pub fn grad(&mut self, wrt: &Variable) -> T {
         self.backprop(wrt, T::one())
     }
 }
@@ -237,11 +249,33 @@ impl<T: Clone> Context<T> {
         Container::new(Variable(var_idx))
     }
 
-    fn get_variable_value(&self, var: &Variable) -> T {
+    /// Get the given variable's value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rugrads::Context;
+    ///
+    /// // Create a new variable with value 2.5
+    /// let mut c = Context::new();
+    /// let x = c.create_variable(2.5);
+    ///
+    /// // Prints "2.5"
+    /// println!("{}", c.get_variable_value(&x));
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the `Variable` does not belong
+    /// to this context.
+    ///
+    /// More accurately - if the `Variable` has an index which is too
+    /// large for this context.
+    pub fn get_variable_value(&self, var: &Variable) -> T {
         self.vars[var.0].clone()
     }
 
-    /// Set the given variable value
+    /// Set the given variable's value
     ///
     /// # Examples
     ///
@@ -253,7 +287,7 @@ impl<T: Clone> Context<T> {
     /// let x = c.create_variable(2.5);
     ///
     /// // Actually, lets make that 3.0!
-    /// c.set_variable_value(x, 3.0);
+    /// c.set_variable_value(&x, 3.0);
     /// ```
     ///
     /// # Panics
@@ -263,8 +297,8 @@ impl<T: Clone> Context<T> {
     ///
     /// More accurately - if the `Variable` has an index which is too
     /// large for this context.
-    pub fn set_variable_value(&mut self, var: Container<T, Variable>, value: T) {
-        self.vars[var.inner.0] = value;
+    pub fn set_variable_value(&mut self, var: &Variable, value: T) {
+        self.vars[var.0] = value;
     }
 }
 
@@ -338,6 +372,7 @@ impl Variable {
     }
 }
 
+#[derive(Clone, Copy)]
 struct IdentityVJP;
 
 impl<T> VecJacProduct<T> for IdentityVJP {
@@ -358,6 +393,22 @@ impl<T: Clone> Expression<T> for Variable {
     }
 }
 
+/// A leaf variable which when evaluated returns itself without any parents
+#[derive(Clone, Copy)]
+pub struct LeafVar<T>(pub T);
+
+impl<T: Clone> Expression<T> for LeafVar<T> {
+    fn eval(&self, c: &mut Context<T>) -> Node<T> {
+        Node {
+            index: c.get_index(),
+            value: self.0.clone(),
+            parents: vec![],
+            progenitors: vec![],
+            _vjp: Box::new(IdentityVJP),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,7 +425,7 @@ mod tests {
         assert_eq!(f.eval(&mut context).value, 2f64);
 
         let mut grad = Gradient::of(f, context);
-        assert_eq!(grad.grad(x), 2f64);
+        assert_eq!(grad.grad(&x), 2f64);
     }
 
     #[test]
@@ -386,10 +437,10 @@ mod tests {
         assert!((f.eval(&mut context).value - 0.84147098).abs() < 1e-5);
 
         let mut grad = Gradient::of(f, context);
-        assert!((grad.grad(x) - 0.540302305).abs() < 1e-5);
+        assert!((grad.grad(&x) - 0.540302305).abs() < 1e-5);
 
-        grad.context().set_variable_value(x, 2.0);
-        assert!((grad.grad(x) + 0.416146836).abs() < 1e-5);
+        grad.context().set_variable_value(&x, 2.0);
+        assert!((grad.grad(&x) + 0.416146836).abs() < 1e-5);
     }
 
     #[test]
@@ -401,7 +452,7 @@ mod tests {
         assert!((f.eval(&mut context).value - 0.979425538f64).abs() < 1e-5);
         
         let mut grad = Gradient::of(f, context);
-        assert!((grad.grad(x) - 1.87758256).abs() < 1e-5);
+        assert!((grad.grad(&x) - 1.87758256).abs() < 1e-5);
     }
 
     #[test]
@@ -414,7 +465,7 @@ mod tests {
         assert!((f.eval(&mut context).value - 0.5).abs() < 1e-5);
         
         let mut grad = Gradient::of(f, context);
-        assert!((grad.grad(x) - 1.0) < 1e-5);
-        assert!((grad.grad(y) - 0.5) < 1e-5);
+        assert!((grad.grad(&x) - 1.0) < 1e-5);
+        assert!((grad.grad(&y) - 0.5) < 1e-5);
     }
 }

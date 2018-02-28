@@ -82,8 +82,8 @@ mod tests {
         assert!((f.eval(&mut c).value - 2.5).abs() < 1e-5);
         let mut g = Gradient::of(f, c);
 
-        assert!((g.grad(x) - 1.0).abs() < 1e-5);
-        assert!((g.grad(y) - 1.0).abs() < 1e-5);
+        assert!((g.grad(&x) - 1.0).abs() < 1e-5);
+        assert!((g.grad(&y) - 1.0).abs() < 1e-5);
     }
 
     #[test]
@@ -96,8 +96,8 @@ mod tests {
         assert!((f.eval(&mut c).value - 1.5).abs() < 1e-5);
         let mut g = Gradient::of(f, c);
 
-        assert!((g.grad(x) - 1.5).abs() < 1e-5);
-        assert!((g.grad(y) - 1.0).abs() < 1e-5);
+        assert!((g.grad(&x) - 1.5).abs() < 1e-5);
+        assert!((g.grad(&y) - 1.0).abs() < 1e-5);
     }
 
     #[test]
@@ -110,8 +110,8 @@ mod tests {
         assert!((f.eval(&mut c).value - f64::recip(1.5)).abs() < 1e-5);
         let mut g = Gradient::of(f, c);
 
-        assert!((g.grad(x) - f64::recip(1.5)).abs() < 1e-5);
-        assert!((g.grad(y) + f64::recip(2.25)).abs() < 1e-5);
+        assert!((g.grad(&x) - f64::recip(1.5)).abs() < 1e-5);
+        assert!((g.grad(&y) + f64::recip(2.25)).abs() < 1e-5);
     }
 
     #[test]
@@ -124,8 +124,8 @@ mod tests {
         assert!((f.eval(&mut c).value + 0.5).abs() < 1e-5);
         let mut g = Gradient::of(f, c);
 
-        assert!((g.grad(x) - 1.0).abs() < 1e-5);
-        assert!((g.grad(y) + 1.0).abs() < 1e-5);
+        assert!((g.grad(&x) - 1.0).abs() < 1e-5);
+        assert!((g.grad(&y) + 1.0).abs() < 1e-5);
     }
 
     #[test]
@@ -136,6 +136,6 @@ mod tests {
         let f = -x;
         assert!((f.eval(&mut c).value + 1.5).abs() < 1e-5);
         let mut g = Gradient::of(f, c);
-        assert!((g.grad(x) + 1.0).abs() < 1e-5);
+        assert!((g.grad(&x) + 1.0).abs() < 1e-5);
     }
 }

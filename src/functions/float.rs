@@ -220,27 +220,15 @@ pub fn powf<T, E>(x: Container<T, E>, n: T) -> Container<T, Powf<T, E>>
 mod tests {
     use super::*;
     use ::functions::{Add, Mul};
-    use ::{Node, Context};
-    use ::{Expression, IdentityVJP};
+    use ::{Context, Expression};
 
-    pub struct TestVar(f64);
-
-    impl Expression<f64> for TestVar {
-        fn eval(&self, c: &mut Context<f64>) -> Node<f64> {
-            Node {
-                index: c.get_index(),
-                value: self.0,
-                parents: vec![],
-                progenitors: vec![],
-                _vjp: Box::new(IdentityVJP),
-            }
-        }
-    }
+    use ::LeafVar;
+    
 
     #[test]
     fn test_add() {
         let mut c = Context::new();
-        let f = Add::new(TestVar(1.0), TestVar(1.0));
+        let f = Add::new(LeafVar(1.0), LeafVar(1.0));
         let node = f.eval(&mut c);
         // Just a dummy node
         let x = &node.parents[0];
@@ -251,7 +239,7 @@ mod tests {
     #[test]
     fn test_mul() {
         let mut c = Context::new();
-        let f = Mul::new(TestVar(0.5), TestVar(0.3));
+        let f = Mul::new(LeafVar(0.5), LeafVar(0.3));
         let node = f.eval(&mut c);
         // Just a dummy node
         let x = &node.parents[0];
@@ -265,7 +253,7 @@ mod tests {
     #[test]
     fn test_sin() {
         let mut c = Context::new();
-        let f = Sin::new(TestVar(0.5));
+        let f = Sin::new(LeafVar(0.5));
         let node = f.eval(&mut c);
         let x = &node.parents[0];
         assert!((node.value - f64::sin(0.5)).abs() < 1e-5);
@@ -275,7 +263,7 @@ mod tests {
     #[test]
     fn test_cos() {
         let mut c = Context::new();
-        let f = Cos::new(TestVar(0.5));
+        let f = Cos::new(LeafVar(0.5));
         let node = f.eval(&mut c);
         let x = &node.parents[0];
         assert!((node.value - f64::cos(0.5)).abs() < 1e-5);
@@ -285,7 +273,7 @@ mod tests {
     #[test]
     fn test_exp() {
         let mut c = Context::new();
-        let f = Exp::new(TestVar(0.5));
+        let f = Exp::new(LeafVar(0.5));
         let node = f.eval(&mut c);
         let x = &node.parents[0];
         assert!((node.value - f64::exp(0.5)).abs() < 1e-5);
@@ -295,7 +283,7 @@ mod tests {
     #[test]
     fn test_ln() {
         let mut c = Context::new();
-        let f = Ln::new(TestVar(0.5));
+        let f = Ln::new(LeafVar(0.5));
         let node = f.eval(&mut c);
         let x = &node.parents[0];
         assert!((node.value - f64::ln(0.5)).abs() < 1e-5);
@@ -305,7 +293,7 @@ mod tests {
     #[test]
     fn test_powf_integer() {
         let mut c = Context::new();
-        let f = Powf::new(TestVar(3.0), 2.0);
+        let f = Powf::new(LeafVar(3.0), 2.0);
         let node = f.eval(&mut c);
         let x = &node.parents[0];
         assert!((node.value - f64::powf(3.0, 2.0)).abs() < 1e-5);
@@ -315,7 +303,7 @@ mod tests {
     #[test]
     fn test_powf_neg_non_int() {
         let mut c = Context::new();
-        let f = Powf::new(TestVar(3.0), -1.3);
+        let f = Powf::new(LeafVar(3.0), -1.3);
         let node = f.eval(&mut c);
         let x = &node.parents[0];
         assert!((node.value - f64::powf(3.0, -1.3)).abs() < 1e-5);

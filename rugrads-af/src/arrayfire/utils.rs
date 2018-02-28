@@ -14,6 +14,7 @@ pub fn repeat_to_match_dims(a: &Array, target_dim: Dim4) -> Array {
     return libaf::tile(&a, Dim4::new(&dim_arr));
 }
 
-// // pub fn broadcast(a: &Array, target_dim: Dim4) -> Array {
-
-// }
+/// Balanced equality for gradient of comparison operators
+pub fn balanced_eq(x: &Array, z: &Array, y: &Array, batch: bool) -> Array {
+    libaf::eq(x, z, batch) / (libaf::eq(x, y, batch) + 1.0)
+}

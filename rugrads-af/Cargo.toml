@@ -6,3 +6,6 @@ authors = ["james <LucasJ94@hotmail.co.uk>"]
 [dependencies]
 arrayfire = {version = "3.5.0"}
 rugrads = {version = "0.0.1", path = ".." }
+
+[dev-dependencies]
+vision = {version = "0.0.2"}

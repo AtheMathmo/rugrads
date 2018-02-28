@@ -1,21 +1,21 @@
 use rugrads;
-use rugrads::{Node, VecJacProduct, Expression};
+use rugrads::{Node, VecJacProduct, Expression, LeafVar};
 
 use libaf;
-use libaf::Array;
+use libaf::{Array, Dim4};
 
 use ::{Context, Container};
 use super::utils::repeat_to_match_dims;
 
-#[derive(Clone, Copy)]
-pub struct LogSumExpVJP;
+#[derive(Clone)]
+pub struct LogSumExpVJP(Array);
 
 impl VecJacProduct<Array> for LogSumExpVJP {
-    fn vjp(&self, g: Array, node: &Node<Array>, x: &Node<Array>, _: usize) -> Array {
-        let output_dims = x.value().dims();
+    fn vjp(&self, g: Array, node: &Node<Array>, _: &Node<Array>, _: usize) -> Array {
+        let output_dims = self.0.dims();
         let g_tiled = repeat_to_match_dims(&g, output_dims);
         let node_tiled = repeat_to_match_dims(&node.value(), output_dims);
-        return libaf::mul(&g_tiled, &libaf::exp(&(x.value() - node_tiled)), false)
+        return libaf::mul(&g_tiled, &libaf::exp(&(&self.0 - node_tiled)), false)
     }
 }
 
@@ -41,8 +41,9 @@ impl<X> Expression<Array> for LogSumExp<X>
 
         let parents = vec![x_eval];
         let progenitors = Node::get_progenitors(&parents);
+        let lse_clone = parents[0].value().clone();
         Node::new(c, out_val,
-                    parents, progenitors, Box::new(LogSumExpVJP))
+                    parents, progenitors, Box::new(LogSumExpVJP(lse_clone)))
     }
 }
 
@@ -57,6 +58,14 @@ pub fn logsoftmax<E: Clone + Expression<Array>>(input: Container<E>, dim: Option
     input.clone() - logsumexp(input, dim)
 }
 
+/// ReLU Activation function
+pub fn relu<E: Expression<Array>>(input: Container<E>)
+    -> Container<super::MaxOf<LeafVar<Array>, rugrads::Container<Array, E>>>
+{
+    let zeros = LeafVar(libaf::constant(0.0, Dim4::new(&[1,1,1,1])));
+    Container::new(super::MaxOf(zeros, input, true))
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -66,6 +75,7 @@ mod tests {
     use ::{Gradient, Context};
 
     use super::*;
+    use ::testsupport::array_eq;
 
     #[test]
     fn test_logsumexp() {
@@ -82,7 +92,7 @@ mod tests {
 
         let mut g = Gradient::of(loss, context);
         
-        let _ = g.grad(var);
+        let _ = g.grad(&var);
     }
 
     #[test]
@@ -98,11 +108,26 @@ mod tests {
         {
             let _ = loss.eval(&mut context);
         }
+    }
 
-        // let mut g = Gradient::of(loss, context);
+    #[test]
+    fn test_relu() {
+        libaf::set_backend(libaf::Backend::CPU);
+        let mut context = Context::new();
+
+        let dims = Dim4::new(&[2,2,1,1]);
+        let arr = Array::new(&[-0.5, 0.5, -0.25, 0.25], dims.clone());
+        let out_arr = Array::new(&[0.0, 0.5, 0.0, 0.25] ,dims.clone());
+        let var = context.create_variable(arr);
+        let loss = relu(var);
+        {
+            let out = loss.eval(&mut context);
+            assert!(array_eq(out.value(), &out_arr, 1e-8));
+        }
+
+        let mut g = Gradient::of(loss, context);
         
-        // let _ = g.grad(var);
-        // panic!()
+        let _ = g.grad(&var);
     }
 }
 
